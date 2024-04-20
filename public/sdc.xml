@@ -1,0 +1,13 @@
+<rss version="2.0">
+    <channel>
+        <title>Eliminacode</title>
+        <description>Questa pagina un eliminacode</description>
+        <item>
+            <presenza>10</presenza>
+            <bottone1>0</bottone1>
+            <bottone2>0</bottone2>
+            <bottone3>0</bottone3>
+            <bottone4>0</bottone4>
+        </item>
+    </channel>
+</rss>
