@@ -4,6 +4,7 @@
 #define MyAppURL "http://www.enycs.com/"
 #define MyAppExeName "SimpleHttpServer.exe"
 #define MyWebFolder "public"
+#define MyLogFolder "log"
 #define MyAppDescription "Simple Http Server"
 
 [Languages]
@@ -40,12 +41,14 @@ Filename: "{app}\{#MyAppExeName}"; Parameters: "remove"; Flags: waituntiltermina
 
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--startup delayed install"; Flags: postinstall runascurrentuser waituntilterminated; Tasks: StartAtBoot
-Filename: "{app}\{#MyAppExeName}"; Parameters: "start"; Flags: postinstall runascurrentuser waituntilterminated; Tasks: StartAtBoot
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--startup delayed install"; Flags: postinstall runascurrentuser waituntilterminated; Description: "Installa il servizio in autoavvio"
+Filename: "{app}\{#MyAppExeName}"; Parameters: "start"; Flags: postinstall runascurrentuser waituntilterminated; Description: "Avvia ora il servizio"
 
 [Icons]
 Name: "{group}\config.ini"; Filename: "{app}\config.ini"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 
-[Tasks]
-Name: "StartAtBoot"; Description: "Start the application at boot"
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}\{#MyWebFolder}"
+Type: filesandordirs; Name: "{app}\{#MyLogFolder}"
+Type: dirifempty; Name: "{app}"
