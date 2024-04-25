@@ -42,15 +42,45 @@ Filename: "{app}\{#MyAppExeName}"; Parameters: "remove"; Flags: waituntiltermina
 
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--startup delayed install"; Flags: postinstall runascurrentuser waituntilterminated; Description: "Installa il servizio in autoavvio"
-Filename: "{app}\{#MyAppExeName}"; Parameters: "start"; Flags: postinstall runascurrentuser waituntilterminated; Description: "Avvia ora il servizio"
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--startup delayed install"; Flags: runascurrentuser waituntilterminated; Description: "Installa il servizio in autoavvio"; Tasks: AvvioAutomatico
+Filename: "{app}\{#MyAppExeName}"; Parameters: "start"; Flags: runascurrentuser waituntilterminated; Description: "Avvia ora il servizio"; Tasks: AvvioAutomatico
+Filename: "{app}\{#MyAppExeName}"; Parameters: "install"; Flags: runascurrentuser waituntilterminated; Description: "Installa il servizio in autoavvio"; Tasks: AvvioManuale
 
 [Icons]
 Name: "{group}\config.ini"; Filename: "{app}\config.ini"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{group}\Start {#MyAppDescription}"; Filename: "{app}\{#MyAppExeName} start"; IconFilename: "{app}\{#MyAppExeName}"; IconIndex: 0
-Name: "{group}\Stop {#MyAppDescription}"; Filename: "{app}\{#MyAppExeName} stop"; IconFilename: "{app}\{#MyAppExeName}"; IconIndex: 0
+Name: "{group}\Start {#MyAppDescription}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "start"; IconFilename: "{app}\Enycs_512.ico"; AfterInstall: SetElevationBit('{group}\Start {#MyAppDescription}.lnk')
+Name: "{group}\Stop {#MyAppDescription}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "stop"; IconFilename: "{app}\Enycs_512.ico"; AfterInstall: SetElevationBit('{group}\Stop {#MyAppDescription}.lnk')
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
 Type: dirifempty; Name: "{#MyAppPublisher}"
+
+[Tasks]
+Name: "AvvioManuale"; Description: "Il servizio dovrà essere avviato manualmente"; Flags: exclusive
+Name: "AvvioAutomatico"; Description: "Il servizio verrà avviato automaticamente al boot"; Flags: exclusive unchecked
+
+; SetElevationBit procedure link https://stackoverflow.com/a/44082068/1145281
+
+[Code]
+
+procedure SetElevationBit(Filename: string);
+var
+  Buffer: string;
+  Stream: TStream;
+begin
+  Filename := ExpandConstant(Filename);
+  Log('Setting elevation bit for ' + Filename);
+
+  Stream := TFileStream.Create(FileName, fmOpenReadWrite);
+  try
+    Stream.Seek(21, soFromBeginning);
+    SetLength(Buffer, 1);
+    Stream.ReadBuffer(Buffer, 1);
+    Buffer[1] := Chr(Ord(Buffer[1]) or $20);
+    Stream.Seek(-1, soFromCurrent);
+    Stream.WriteBuffer(Buffer, 1);
+  finally
+    Stream.Free;
+  end;
+end;
