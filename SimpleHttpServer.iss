@@ -31,9 +31,10 @@ OutputDir=dist
 PrivilegesRequired=poweruser
 
 [Files]
-Source: "dist\{#MyAppExeName}"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: replacesameversion
+Source: "dist/{#MyAppExeName}"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: replacesameversion
 Source: "config.ini"; DestDir: "{app}"
 Source: "{#MyWebFolder}/sdc.xml"; DestDir: "{app}/{#MyWebFolder}"
+Source: "Enycs_512.ico"; DestDir: "{app}"
 
 [UninstallRun]
 Filename: "{app}\{#MyAppExeName}"; Parameters: "stop"; Flags: waituntilterminated
@@ -47,8 +48,9 @@ Filename: "{app}\{#MyAppExeName}"; Parameters: "start"; Flags: postinstall runas
 [Icons]
 Name: "{group}\config.ini"; Filename: "{app}\config.ini"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
+Name: "{group}\Start {#MyAppDescription}"; Filename: "{app}\{#MyAppExeName} start"; IconFilename: "{app}\{#MyAppExeName}"; IconIndex: 0
+Name: "{group}\Stop {#MyAppDescription}"; Filename: "{app}\{#MyAppExeName} stop"; IconFilename: "{app}\{#MyAppExeName}"; IconIndex: 0
 
 [UninstallDelete]
-Type: filesandordirs; Name: "{app}\{#MyWebFolder}"
-Type: filesandordirs; Name: "{app}\{#MyLogFolder}"
-Type: dirifempty; Name: "{app}"
+Type: filesandordirs; Name: "{app}"
+Type: dirifempty; Name: "{#MyAppPublisher}"
