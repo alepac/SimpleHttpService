@@ -13,7 +13,10 @@ import time
 import sys
 from datetime import datetime
 
-VERSION="0.0.1"
+from Cinema import Cinema
+from ThreadingHTTPServerWithArgs import ThreadingHTTPServerWithArgs
+
+VERSION="0.0.2"
 
 default_values = {
     "httpPort": 8000
@@ -28,11 +31,28 @@ serviceLogger.setLevel(logging.DEBUG)
 
 class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
     # Override the __init__ method to specify the directory
-    def __init__(self, request, address, server):
-        super().__init__(request, address, server, directory=web_folder)    
+    def __init__(self, request, client_address, server, *args, **kwargs):
+        # Questi sono gli argomenti aggiuntivi che passerai al server, qui li estraiamo.
+        self.cinema_instances = kwargs.pop('cinema_instances', {})
+        
+        # Ora passiamo tutti gli argomenti al costruttore della classe base.
+        super().__init__(request, client_address, server, directory=web_folder, *args, **kwargs)    
     
     def log_message(self, format, *args):
         serviceLogger.info(format % args)
+        
+    def do_GET(self):
+        # Controlla se l'URL richiesto è quello della nostra pagina dinamica
+        customPath = self.path[1:]  # Rimuove il primo carattere '/'
+        if customPath in  self.cinema_instances:
+            # Prepara e invia la risposta per la pagina dinamica
+            self.send_response(200)
+            self.send_header('Content-type', 'text/xml')
+            self.end_headers()
+            self.wfile.write(bytes(self.cinema_instances[customPath].getContent(), "utf8"))
+        else:
+            # Per tutte le altre richieste, usa il comportamento predefinito
+            super().do_GET()
 
 class SimpleHttpService(win32serviceutil.ServiceFramework):
     _svc_name_ = 'SimpleHttpService'
@@ -40,11 +60,13 @@ class SimpleHttpService(win32serviceutil.ServiceFramework):
     _svc_description_ = 'It serves simple http requests'
 
     def __init__(self, args):
-        win32serviceutil.ServiceFramework.__init__(self, args)
-        self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
+        if not(len(args) > 1 and args[1].lower() == 'debug'):
+            win32serviceutil.ServiceFramework.__init__(self, args)
+            self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
         self.log = serviceLogger
 
         socket.setdefaulttimeout(60)
+        self.cinema_data_managers = {}
         self.stop_event = Event()
         self.start_event = Event()
 
@@ -103,15 +125,28 @@ class SimpleHttpService(win32serviceutil.ServiceFramework):
         config.read(current_dir + '\config.ini')
 
         httpPort = int(config['DEFAULT']['httpPort'])
+        
+        for section in config.sections():
+            if section.startswith('cinema'):
+                cinema_name = section
+                cinema_url = config[section]['url']
+                cinema_interval = int(config[section]['interval'])
+                self.cinema_data_managers[cinema_name] = Cinema(http_url=cinema_url, logger=serviceLogger, interval=cinema_interval)
+        
+        # Avvia i thread di polling
+        for cinema_managed in self.cinema_data_managers.values():
+            cinema_managed.start()
 
         while not self.stop_event.is_set():
             try:
-                self.server = http.server.ThreadingHTTPServer(('localhost', httpPort), MyRequestHandler)
+                self.server = ThreadingHTTPServerWithArgs(('localhost', httpPort), MyRequestHandler, self.cinema_data_managers)
                 self.log.info(f'Serving on port {httpPort} from "{web_folder}"')
                 self.server.serve_forever()
             except Exception as e:
                 self.log.info(f"Error starting HTTP server: {e}")
                 self.stop_event.set()
+        for cinema_managed in self.cinema_data_managers.values():
+            cinema_managed.stop()
 
 if __name__ == '__main__':
     if len(sys.argv) == 1:
@@ -121,6 +156,14 @@ if __name__ == '__main__':
             servicemanager.StartServiceCtrlDispatcher()
         except Exception:
             win32serviceutil.HandleCommandLine(SimpleHttpService)
+    elif sys.argv[1].lower() == 'debug':
+        # Run the service in debug mode
+        web_folder = 'public'
+        current_dir = '.'
+        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)-7.7s %(message)s')
+        serviceLogger.info("Running in debug mode")
+        service = SimpleHttpService(sys.argv)
+        service.Run()
     else:
         win32serviceutil.HandleCommandLine(SimpleHttpService)
 
