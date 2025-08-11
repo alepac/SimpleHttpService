@@ -23,8 +23,8 @@ default_values = {
 }
 
 current_dir = os.path.dirname(sys.executable)
-web_folder = current_dir + '\public'
-log_folder = current_dir + '\log'
+web_folder = current_dir + '\\public'
+log_folder = current_dir + '\\log'
 serviceLogger = logging.getLogger(__name__)
 
 serviceLogger.setLevel(logging.DEBUG)
@@ -43,13 +43,16 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
         
     def do_GET(self):
         # Controlla se l'URL richiesto è quello della nostra pagina dinamica
-        customPath = self.path[1:]  # Rimuove il primo carattere '/'
-        if customPath in  self.cinema_instances:
+        cinema, service = self.path[1:].split('/') 
+        if cinema in  self.cinema_instances and service in ['films', 'sale']:
             # Prepara e invia la risposta per la pagina dinamica
             self.send_response(200)
             self.send_header('Content-type', 'text/xml')
             self.end_headers()
-            self.wfile.write(bytes(self.cinema_instances[customPath].getContent(), "utf8"))
+            if service == "films":
+                self.wfile.write(bytes(self.cinema_instances[cinema].getFilmContent(), "utf8"))
+            else:
+                self.wfile.write(bytes(self.cinema_instances[cinema].getSaleContent(), "utf8"))
         else:
             # Per tutte le altre richieste, usa il comportamento predefinito
             super().do_GET()
@@ -60,7 +63,7 @@ class SimpleHttpService(win32serviceutil.ServiceFramework):
     _svc_description_ = 'It serves simple http requests'
 
     def __init__(self, args):
-        if not(len(args) > 1 and args[1].lower() == 'debug'):
+        if not(len(args) > 1 and args[1].lower() == 'standalone'):
             win32serviceutil.ServiceFramework.__init__(self, args)
             self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
         self.log = serviceLogger
@@ -98,7 +101,7 @@ class SimpleHttpService(win32serviceutil.ServiceFramework):
         today = datetime.today()
         if not os.path.exists(log_folder):
             os.mkdir(log_folder)
-        log_filename = today.strftime(log_folder +'\http_server_%Y-%m-%d.log')
+        log_filename = today.strftime(log_folder +'\\http_server_%Y-%m-%d.log')
         fileHandler = logging.FileHandler(log_filename)
         fileHandler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)-7.7s %(message)s'))
         for handler in self.log.handlers[:]:
@@ -122,16 +125,18 @@ class SimpleHttpService(win32serviceutil.ServiceFramework):
 
     def Run(self):
         config = configparser.ConfigParser(default_values)
-        config.read(current_dir + '\config.ini')
+        config.read(current_dir + '\\config.ini')
 
         httpPort = int(config['DEFAULT']['httpPort'])
         
         for section in config.sections():
-            if section.startswith('cinema'):
+            if not section.startswith('DEFAULT'):
                 cinema_name = section
-                cinema_url = config[section]['url']
+                films_url = config[section]['films_url']
+                sale_url = config[section]['sale_url']
+                name = config[section]['name']
                 cinema_interval = int(config[section]['interval'])
-                self.cinema_data_managers[cinema_name] = Cinema(http_url=cinema_url, logger=serviceLogger, interval=cinema_interval)
+                self.cinema_data_managers[cinema_name] = Cinema(name = name, films_url=films_url, sale_url=sale_url, logger=serviceLogger, interval=cinema_interval)
         
         # Avvia i thread di polling
         for cinema_managed in self.cinema_data_managers.values():
@@ -156,12 +161,12 @@ if __name__ == '__main__':
             servicemanager.StartServiceCtrlDispatcher()
         except Exception:
             win32serviceutil.HandleCommandLine(SimpleHttpService)
-    elif sys.argv[1].lower() == 'debug':
-        # Run the service in debug mode
+    elif sys.argv[1].lower() == 'standalone':
+        # Run the service in standalone mode
         web_folder = 'public'
         current_dir = '.'
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)-7.7s %(message)s')
-        serviceLogger.info("Running in debug mode")
+        serviceLogger.info("Running in standalone mode")
         service = SimpleHttpService(sys.argv)
         service.Run()
     else:

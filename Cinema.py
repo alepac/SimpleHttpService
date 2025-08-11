@@ -5,11 +5,35 @@ import threading
 import requests
 import logging
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+def parse_iso_datetime(iso_str):
+    try:
+        # Parsing della stringa ISO
+        dt = datetime.fromisoformat(iso_str)
+
+        # Conversione alla timezone locale
+        mytime = datetime.now().astimezone()
+        local_tz = mytime.tzinfo
+        dt_local = dt.astimezone(local_tz)
+
+        # Estrazione di data e ora come stringhe
+        date_str = dt_local.strftime("%Y-%m-%d")
+        time_str = dt_local.strftime("%H:%M:%S")
+        diff_minutes = int((dt_local - mytime).total_seconds() / 60)
+
+
+        return date_str, time_str, diff_minutes
+    except ValueError:
+        return None, None, None  # La stringa non è in formato ISO valido
+
+
 class Cinema:
     """
     Una classe per gestire il polling di un URL JSON, convertirlo in XML e renderlo disponibile.
     """
-    def __init__(self, http_url, logger, interval=10):
+    def __init__(self, name, films_url, sale_url, logger, interval=10):
         """
         Inizializza l'istanza della classe.
 
@@ -17,15 +41,41 @@ class Cinema:
         :param logger: Un'istanza del logger da utilizzare per i messaggi.
         :param interval: L'intervallo di tempo in secondi tra una richiesta e l'altra.
         """
-        self.http_url = http_url
+        self.films_url = films_url
+        self.sale_url = sale_url
+        self.name = name
         self.logger = logger
         self.interval = interval
-        self._content = None
+        self._films_content = None
+        self._sale_content = None
         self._thread = None
         self._running = False
         self._lock = threading.Lock()
 
-    def _convert_json_to_rss(self, json_data):
+    def _append_rss_elements(self, name, json_data, parent):
+        if isinstance(json_data, list):
+            for data in json_data:
+                item = ET.SubElement(parent, name)
+                self._append_rss_elements(name, data, item)
+        elif isinstance(json_data, dict):
+            for key, value in json_data.items():
+                self._append_rss_elements(key,value,parent)
+        else:
+            text = str(json_data)
+            date, time, delta = parse_iso_datetime(text)
+            if date and time:
+                element = ET.SubElement(parent, name+"_date")            
+                element.text = str(date)
+                element = ET.SubElement(parent, name+"_time")            
+                element.text = str(time)
+                element = ET.SubElement(parent, name+"_delta")            
+                element.text = str(delta)
+            else:
+                element = ET.SubElement(parent, name)            
+                element.text = str(json_data)
+
+
+    def _convert_json_to_rss(self, json_data, main):
         """
         Converte un JSON con un array di film in un feed RSS 2.0.
         """
@@ -40,29 +90,30 @@ class Cinema:
             description.text = "Questa pagina è un eliminacode"
             
             # Itera sull'array di film nel JSON
-            films = json_data.get("films", [])
-            for film in films:
-                # Per ogni film, crea un nuovo elemento <item>
-                item = ET.SubElement(channel, "item")
+            data = json_data.get(main, [])
+            self._append_rss_elements( 'item', data, channel)
+            # for film in films:
+            #     # Per ogni film, crea un nuovo elemento <item>
+            #     item = ET.SubElement(channel, "item")
                 
-                # Aggiungi i campi del film come elementi XML
-                for key, value in film.items():
-                    # Ignora il campo 'film_occupation' come richiesto
-                    if key == "film_occupations":
-                        element = ET.SubElement(item, key)
-                        count = 0
-                        for occupation in value:
-                            occupationElement = ET.SubElement(element, f"occupation_{count}")
-                            count = count + 1
-                            for subkey, subvalue in occupation.items():
-                                subelement = ET.SubElement(occupationElement, subkey)
-                                subelement.text = str(subvalue)
-                    else:
-                        # Crea un tag XML con il nome del campo
-                        element = ET.SubElement(item, key)
+            #     # Aggiungi i campi del film come elementi XML
+            #     for key, value in film.items():
+            #         # Ignora il campo 'film_occupation' come richiesto
+            #         if key == "film_occupations":
+            #             element = ET.SubElement(item, key)
+            #             count = 0
+            #             for occupation in value:
+            #                 occupationElement = ET.SubElement(element, f"occupation_{count}")
+            #                 count = count + 1
+            #                 for subkey, subvalue in occupation.items():
+            #                     subelement = ET.SubElement(occupationElement, subkey)
+            #                     subelement.text = str(subvalue)
+            #         else:
+            #             # Crea un tag XML con il nome del campo
+            #             element = ET.SubElement(item, key)
                         
-                        # Converti il valore in stringa e assegnaglielo come testo
-                        element.text = str(value)
+            #             # Converti il valore in stringa e assegnaglielo come testo
+            #             element.text = str(value)
             
             # Restituisci il contenuto XML come stringa formattata
             return ET.tostring(root, encoding='unicode')
@@ -72,40 +123,42 @@ class Cinema:
             # Restituisci un XML di errore in caso di fallimento
             return f'<rss><channel><item><error>{e}</error></item></channel></rss>'
 
+    def _poll_data(self, http_url, main):
+        try:
+            response = requests.get(http_url, timeout=5)
+            response.raise_for_status()  # Solleva un'eccezione per errori HTTP (4xx o 5xx)
+            
+            json_data = response.json()
+            return self._convert_json_to_rss(json_data, main)
+            
+        except requests.exceptions.RequestException as e:
+            error_message = f"Errore durante la richiesta HTTP all'URL {http_url}: {e}"
+            self.logger.error(error_message)
+            return f"<error>{error_message}</error>"
+        except json.JSONDecodeError:
+            error_message = f"Errore di decodifica JSON dalla risposta dell'URL {http_url}"
+            self.logger.error(error_message)
+            return f"<error>{error_message}</error>"
+        except Exception as e:
+            error_message = f"Errore generico durante il polling: {e}"
+            self.logger.error(error_message)
+            return f"<error>{error_message}</error>"
 
-    def _poll_data(self):
+    def _poll_thread(self):
         """
         Il metodo che verrà eseguito nel thread separato.
         Effettua la richiesta HTTP, converte la risposta in XML e aggiorna la variabile.
         """
+
         while self._running:
-            try:
-                response = requests.get(self.http_url, timeout=5)
-                response.raise_for_status()  # Solleva un'eccezione per errori HTTP (4xx o 5xx)
-                
-                json_data = response.json()
-                xml_data = self._convert_json_to_rss(json_data)
-                
-                with self._lock:
-                    self._content = xml_data
-                
-                self.logger.info(f"Dati aggiornati dall'URL: {self.http_url}")
-                
-            except requests.exceptions.RequestException as e:
-                error_message = f"Errore durante la richiesta HTTP all'URL {self.http_url}: {e}"
-                self.logger.error(error_message)
-                with self._lock:
-                    self._content = f"<error>{error_message}</error>"
-            except json.JSONDecodeError:
-                error_message = f"Errore di decodifica JSON dalla risposta dell'URL {self.http_url}"
-                self.logger.error(error_message)
-                with self._lock:
-                    self._content = f"<error>{error_message}</error>"
-            except Exception as e:
-                error_message = f"Errore generico durante il polling: {e}"
-                self.logger.error(error_message)
-                with self._lock:
-                    self._content = f"<error>{error_message}</error>"
+            xml_data = self._poll_data(self.films_url, 'films')
+            with self._lock:
+                self._films_content = xml_data            
+            self.logger.info(f"Dati aggiornati dall'URL: {self.films_url}")
+            xml_data = self._poll_data(self.sale_url, self.name)
+            with self._lock:
+                self._sale_content = xml_data            
+            self.logger.info(f"Dati aggiornati dall'URL: {self.sale_url}")
 
             time.sleep(self.interval)
 
@@ -115,7 +168,7 @@ class Cinema:
         """
         if self._thread is None or not self._thread.is_alive():
             self._running = True
-            self._thread = threading.Thread(target=self._poll_data, daemon=True)
+            self._thread = threading.Thread(target=self._poll_thread, daemon=True)
             self._thread.start()
             self.logger.info("Thread di polling avviato.")
         else:
@@ -132,9 +185,16 @@ class Cinema:
         else:
             self.logger.warning("Il thread non è in esecuzione.")
 
-    def getContent(self):
+    def getFilmContent(self):
         """
         Restituisce il contenuto XML aggiornato.
         """
         with self._lock:
-            return self._content
+            return self._films_content
+        
+    def getSaleContent(self):
+        """
+        Restituisce il contenuto XML aggiornato.
+        """
+        with self._lock:
+            return self._sale_content
