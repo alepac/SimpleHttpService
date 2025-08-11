@@ -16,7 +16,7 @@ from datetime import datetime
 from Cinema import Cinema
 from ThreadingHTTPServerWithArgs import ThreadingHTTPServerWithArgs
 
-VERSION="0.0.2"
+VERSION="0.0.3"
 
 default_values = {
     "httpPort": 8000
@@ -43,7 +43,12 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
         
     def do_GET(self):
         # Controlla se l'URL richiesto è quello della nostra pagina dinamica
-        cinema, service = self.path[1:].split('/') 
+        cinema = None
+        service = None
+        try:
+            cinema, service = self.path[1:].split('/') 
+        except Exception as e:
+            pass
         if cinema in  self.cinema_instances and service in ['films', 'sale']:
             # Prepara e invia la risposta per la pagina dinamica
             self.send_response(200)

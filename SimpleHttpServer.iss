@@ -1,5 +1,5 @@
 #define MyAppName "SimpleHttpServer"
-#define MyAppVersion "0.0.2"
+#define MyAppVersion "0.0.3"
 #define MyAppPublisher "Enycs"
 #define MyAppURL "http://www.enycs.com/"
 #define MyAppExeName "SimpleHttpServer.exe"
@@ -57,8 +57,8 @@ Type: filesandordirs; Name: "{app}"
 Type: dirifempty; Name: "{#MyAppPublisher}"
 
 [Tasks]
-Name: "AvvioManuale"; Description: "Il servizio dovrà essere avviato manualmente"; Flags: exclusive
-Name: "AvvioAutomatico"; Description: "Il servizio verrà avviato automaticamente al boot"; Flags: exclusive unchecked
+Name: "AvvioManuale"; Description: "Il servizio dovrï¿½ essere avviato manualmente"; Flags: exclusive
+Name: "AvvioAutomatico"; Description: "Il servizio verrï¿½ avviato automaticamente al boot"; Flags: exclusive unchecked
 
 ; SetElevationBit procedure link https://stackoverflow.com/a/44082068/1145281
 
