@@ -1,11 +1,13 @@
 #define MyAppName "SimpleHttpServer"
-#define MyAppVersion "0.0.3"
+#define MyAppVersion "0.0.4"
 #define MyAppPublisher "Enycs"
 #define MyAppURL "http://www.enycs.com/"
 #define MyAppExeName "SimpleHttpServer.exe"
 #define MyWebFolder "public"
 #define MyLogFolder "log"
 #define MyAppDescription "Simple Http Server"
+#define MyServiceName "SimpleHttpService"
+
 
 [Languages]
 Name: "italian"; MessagesFile: "compiler:Languages\Italian.isl"
@@ -26,7 +28,7 @@ SolidCompression=yes
 VersionInfoVersion={#MyAppVersion}
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppDescription}
-OutputBaseFilename={#MyAppName}-Setup
+OutputBaseFilename={#MyAppName}-Setup_{#MyAppVersion}
 OutputDir=dist
 PrivilegesRequired=poweruser
 
@@ -36,9 +38,9 @@ Source: "config.ini"; DestDir: "{app}"
 Source: "{#MyWebFolder}/sdc.xml"; DestDir: "{app}/{#MyWebFolder}"
 Source: "Enycs_512.ico"; DestDir: "{app}"
 
-[UninstallRun]
-Filename: "{app}\{#MyAppExeName}"; Parameters: "stop"; Flags: waituntilterminated
-Filename: "{app}\{#MyAppExeName}"; Parameters: "remove"; Flags: waituntilterminated
+;[UninstallRun]
+;Filename: "{app}\{#MyAppExeName}"; Parameters: "stop"; Flags: waituntilterminated
+;Filename: "{app}\{#MyAppExeName}"; Parameters: "remove"; Flags: waituntilterminated
 
 
 [Run]
@@ -57,13 +59,96 @@ Type: filesandordirs; Name: "{app}"
 Type: dirifempty; Name: "{#MyAppPublisher}"
 
 [Tasks]
-Name: "AvvioManuale"; Description: "Il servizio dovrï¿½ essere avviato manualmente"; Flags: exclusive
-Name: "AvvioAutomatico"; Description: "Il servizio verrï¿½ avviato automaticamente al boot"; Flags: exclusive unchecked
-
-; SetElevationBit procedure link https://stackoverflow.com/a/44082068/1145281
+Name: "AvvioManuale"; Description: "Il servizio dovrà essere avviato manualmente"; Flags: exclusive
+Name: "AvvioAutomatico"; Description: "Il servizio verrà avviato automaticamente al boot"; Flags: exclusive unchecked
 
 [Code]
+const
+  ServiceName = '{#MyServiceName}';
 
+function ExecAndCapture(const CmdLine: string; var Output: TExecOutput): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Result := ExecAndCaptureOutput('cmd.exe', '/C ' + CmdLine, '', SW_HIDE, ewWaitUntilTerminated, ResultCode, Output);
+
+end;
+
+function IsServiceStopped(): Boolean;
+var
+  Output: TExecOutput;
+  ResultCode: Integer;
+begin
+  Result := False;
+  if ExecAndCapture('sc query "' + ServiceName + '"', Output) then
+    Result := (Pos('STOPPED', StringJoin(' ', Output.StdOut)) > 0 );
+end;
+
+function WaitForServiceToStop(MaxSeconds: Integer): Boolean;
+var
+  i: Integer;
+begin
+  for i := 0 to MaxSeconds do
+  begin
+    if IsServiceStopped() then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Sleep(1000);
+  end;
+  Result := False;
+end;
+
+function IsServiceDeleted(): Boolean;
+var
+  ResultCode: Integer;
+  Output: TExecOutput;
+begin
+  Result := False;
+  if ExecAndCapture('sc query "' + ServiceName + '"', Output) then
+    Result := (Pos('FAILED', StringJoin(' ', Output.StdOut)) > 0) or (Pos('does not exist', StringJoin(' ', Output.StdOut)) > 0);
+end;
+
+function StopAndDeleteService(): Boolean;
+var
+  ResultCode: Integer;
+  Success: Boolean;
+begin
+  // Prova a fermare il servizio
+  Success := Exec('sc.exe', 'stop "' + ServiceName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  // Attendi che sia fermo (max 10 secondi)
+  Success := WaitForServiceToStop(10) and Success;
+
+  // Prova a eliminarlo
+  Success := Exec('sc.exe', 'delete "' + ServiceName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and Success;
+
+  // Verifica che sia stato rimosso
+  Success := IsServiceDeleted() and Success;
+
+  Result := Success;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    if not StopAndDeleteService() then
+      MsgBox('Impossibile fermare o rimuovere il servizio "' + ServiceName + '". Assicurati di avere i permessi necessari.', mbError, MB_OK);
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then
+  begin
+    if not StopAndDeleteService() then
+      MsgBox('Impossibile fermare il servizio. Assicurati di avere i permessi necessari.', mbError, MB_OK);
+  end;
+end;
+
+// SetElevationBit procedure link https://stackoverflow.com/a/44082068/1145281
 procedure SetElevationBit(Filename: string);
 var
   Buffer: string;

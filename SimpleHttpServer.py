@@ -16,7 +16,7 @@ from datetime import datetime
 from Cinema import Cinema
 from ThreadingHTTPServerWithArgs import ThreadingHTTPServerWithArgs
 
-VERSION="0.0.3"
+VERSION="0.0.4"
 
 default_values = {
     "httpPort": 8000
