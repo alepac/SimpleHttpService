@@ -53,16 +53,17 @@ class Cinema:
         self._running = False
         self._lock = threading.Lock()
         self.custom_element = {
-            "theater_name": self._handle_theater_name
+            "theater_name": self._handle_name_id,
+            "name": self._handle_name_id
         }
 
-    def _handle_theater_name(self, name, json_data, parent):
+    def _handle_name_id(self, name, json_data, parent):
         text = str(json_data)
         element = ET.SubElement(parent, name)            
         element.text = text        
         match = re.search(r'(\d+)$', text)
         if match:
-            element = ET.SubElement(parent, "theater_name_id")            
+            element = ET.SubElement(parent, f"{name}_id")            
             element.text = match.group(1)
 
 
@@ -73,7 +74,10 @@ class Cinema:
         if isinstance(json_data, list):
             for data in json_data:
                 item = ET.SubElement(parent, name)
-                self._append_rss_elements(name, data, item)
+                if isinstance(data, str):
+                    item.text = data
+                else:
+                    self._append_rss_elements(name, data, item)
         elif isinstance(json_data, dict):
             for key, value in json_data.items():
                 self._append_rss_elements(key,value,parent)
@@ -104,35 +108,13 @@ class Cinema:
             
             # Aggiungi i metadati del canale
             title = ET.SubElement(channel, "title")
-            title.text = "Eliminacode"
+            title.text = main
             description = ET.SubElement(channel, "description")
-            description.text = "Questa pagina è un eliminacode"
+            description.text = f"Questa pagina è un estratto di {main}"
             
-            # Itera sull'array di film nel JSON
             data = json_data.get(main, [])
+            self.logger.info(f"Trovati {len(data)} elementi")
             self._append_rss_elements( 'item', data, channel)
-            # for film in films:
-            #     # Per ogni film, crea un nuovo elemento <item>
-            #     item = ET.SubElement(channel, "item")
-                
-            #     # Aggiungi i campi del film come elementi XML
-            #     for key, value in film.items():
-            #         # Ignora il campo 'film_occupation' come richiesto
-            #         if key == "film_occupations":
-            #             element = ET.SubElement(item, key)
-            #             count = 0
-            #             for occupation in value:
-            #                 occupationElement = ET.SubElement(element, f"occupation_{count}")
-            #                 count = count + 1
-            #                 for subkey, subvalue in occupation.items():
-            #                     subelement = ET.SubElement(occupationElement, subkey)
-            #                     subelement.text = str(subvalue)
-            #         else:
-            #             # Crea un tag XML con il nome del campo
-            #             element = ET.SubElement(item, key)
-                        
-            #             # Converti il valore in stringa e assegnaglielo come testo
-            #             element.text = str(value)
             
             # Restituisci il contenuto XML come stringa formattata
             return ET.tostring(root, encoding='unicode')
