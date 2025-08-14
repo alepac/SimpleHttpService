@@ -113,7 +113,6 @@ end;
 function IsServiceStopped(): Boolean;
 var
   Output: TExecOutput;
-  ResultCode: Integer;
 begin
   Result := False;
   if ExecAndCapture('sc query "' + ServiceName + '"', Output) then
@@ -164,8 +163,8 @@ begin
     // Prova a fermare il servizio
     Exec('sc.exe', 'stop "' + ServiceName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-    // Attendi che sia fermo (max 10 secondi)
-    Success := WaitForServiceToStop(10);
+    // Attendi che sia fermo (max 20 secondi)
+    Success := WaitForServiceToStop(20);
 
     // Prova a eliminarlo
     Success := Exec('sc.exe', 'delete "' + ServiceName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and Success;

@@ -74,20 +74,23 @@ class SimpleHttpService(win32serviceutil.ServiceFramework):
     _svc_description_ = 'It serves simple http requests'
 
     def __init__(self, args):
-        if not(len(args) > 1 and args[1].lower() == 'standalone'):
-            win32serviceutil.ServiceFramework.__init__(self, args)
-            self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
         self.log = serviceLogger
+        try:            
+            args_list = list(args)
+            if not(len(args_list) > 1 and args_list[1].lower() == 'standalone'):
+                win32serviceutil.ServiceFramework.__init__(self, args)
+                self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
 
-        socket.setdefaulttimeout(60)
-        self.cinema_data_managers = {}
-        self.stop_event = Event()
-        self.start_event = Event()
-
+            socket.setdefaulttimeout(60)
+            self.cinema_data_managers = {}
+            self.stop_event = Event()
+            self.start_event = Event()
+        except Exception as e:
+            self.log.error(f"Exception initializing SimpleHttpService: {e}")
 
 
     def SvcStop(self):
-        self.log.info(f"Stopping service v{VERSION}")
+        self.log.info(f"Stopping service v{version.SIMPLEHTTPSERVICE_VERSION}")
         self.stop_event.set()
         try:
             self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
@@ -104,7 +107,7 @@ class SimpleHttpService(win32serviceutil.ServiceFramework):
         daily_log_handler_thread = threading.Thread(target=self.Schedule_daily_log_handler)
         daily_log_handler_thread.start()
         self.start_event.wait()
-        self.log.info(f"Starting service v{VERSION}")
+        self.log.info(f"Starting service v{version.SIMPLEHTTPSERVICE_VERSION}")
         self.Run()
         win32event.WaitForSingleObject(self.hWaitStop, win32event.INFINITE)
     
