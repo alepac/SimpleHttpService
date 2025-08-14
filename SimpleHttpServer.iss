@@ -59,8 +59,8 @@ Type: filesandordirs; Name: "{app}"
 Type: dirifempty; Name: "{#MyAppPublisher}"
 
 [Tasks]
-Name: "AvvioManuale"; Description: "Il servizio dovrà essere avviato manualmente"; Flags: exclusive
-Name: "AvvioAutomatico"; Description: "Il servizio verrà avviato automaticamente al boot"; Flags: exclusive unchecked
+Name: "AvvioManuale"; Description: "Il servizio dovr? essere avviato manualmente"; Flags: exclusive
+Name: "AvvioAutomatico"; Description: "Il servizio verr? avviato automaticamente al boot"; Flags: exclusive unchecked
 
 [Code]
 const
@@ -138,11 +138,17 @@ end;
 function IsServiceDeleted(): Boolean;
 var
   ResultCode: Integer;
-  Output: TExecOutput;
 begin
   Result := False;
-  if ExecAndCapture('sc query "' + ServiceName + '"', Output) then
-    Result := (Pos('FAILED', StringJoin(' ', Output.StdOut)) > 0) or (Pos('does not exist', StringJoin(' ', Output.StdOut)) > 0);
+  // Esegui il comando e cattura il codice di ritorno
+  // Non è necessario catturare l'output testuale, ma il formato della funzione lo richiede
+  Exec('sc.exe', 'query "' + ServiceName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  // Il servizio non esiste se il codice di errore è 1060
+  if ResultCode = 1060 then
+  begin
+    Result := True;
+  end;
 end;
 
 function StopAndDeleteService(): Boolean;
@@ -150,19 +156,24 @@ var
   ResultCode: Integer;
   Success: Boolean;
 begin
-  // Prova a fermare il servizio
-  Exec('sc.exe', 'stop "' + ServiceName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := True
+  
+  if not IsServiceDeleted() then
+  begin
+    // Prova a fermare il servizio
+    Exec('sc.exe', 'stop "' + ServiceName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-  // Attendi che sia fermo (max 20 secondi)
-  Success := WaitForServiceToStop(20);
+    // Attendi che sia fermo (max 10 secondi)
+    Success := WaitForServiceToStop(10);
 
-  // Prova a eliminarlo
-  Success := Exec('sc.exe', 'delete "' + ServiceName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and Success;
+    // Prova a eliminarlo
+    Success := Exec('sc.exe', 'delete "' + ServiceName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and Success;
 
-  // Verifica che sia stato rimosso
-  Success := IsServiceDeleted() and Success;
+    // Verifica che sia stato rimosso
+    Success := IsServiceDeleted() and Success;
 
-  Result := Success;
+    Result := Success;
+  end;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
