@@ -60,12 +60,47 @@ Type: filesandordirs; Name: "{app}"
 Type: dirifempty; Name: "{#MyAppPublisher}"
 
 [Tasks]
-Name: "AvvioManuale"; Description: "Il servizio dovrï¿½ essere avviato manualmente"; Flags: exclusive
-Name: "AvvioAutomatico"; Description: "Il servizio verrï¿½ avviato automaticamente al boot"; Flags: exclusive unchecked
+Name: "AvvioManuale"; Description: "Il servizio dovrà essere avviato manualmente"; Flags: exclusive
+Name: "AvvioAutomatico"; Description: "Il servizio verrà avviato automaticamente al boot"; Flags: exclusive unchecked
 
 [Code]
 const
   ServiceName = '{#MyServiceName}';
+  NET_FW_SCOPE_ALL = 0;
+  NET_FW_IP_VERSION_ANY = 2;
+
+procedure SetFirewallException(AppName,FileName:string);
+var
+  FirewallObject: Variant;
+  FirewallManager: Variant;
+  FirewallProfile: Variant;
+begin
+  try
+    FirewallObject := CreateOleObject('HNetCfg.FwAuthorizedApplication');
+    FirewallObject.ProcessImageFileName := FileName;
+    FirewallObject.Name := AppName;
+    FirewallObject.Scope := NET_FW_SCOPE_ALL;
+    FirewallObject.IpVersion := NET_FW_IP_VERSION_ANY;
+    FirewallObject.Enabled := True;
+    FirewallManager := CreateOleObject('HNetCfg.FwMgr');
+    FirewallProfile := FirewallManager.LocalPolicy.CurrentProfile;
+    FirewallProfile.AuthorizedApplications.Add(FirewallObject);
+  except
+  end;
+end;
+
+procedure RemoveFirewallException( FileName:string );
+var
+  FirewallManager: Variant;
+  FirewallProfile: Variant;
+begin
+  try
+    FirewallManager := CreateOleObject('HNetCfg.FwMgr');
+    FirewallProfile := FirewallManager.LocalPolicy.CurrentProfile;
+    FireWallProfile.AuthorizedApplications.Remove(FileName);
+  except
+  end;
+end;
 
 function ExecAndCapture(const CmdLine: string; var Output: TExecOutput): Boolean;
 var
@@ -104,11 +139,17 @@ end;
 function IsServiceDeleted(): Boolean;
 var
   ResultCode: Integer;
-  Output: TExecOutput;
 begin
   Result := False;
-  if ExecAndCapture('sc query "' + ServiceName + '"', Output) then
-    Result := (Pos('FAILED', StringJoin(' ', Output.StdOut)) > 0) or (Pos('does not exist', StringJoin(' ', Output.StdOut)) > 0);
+  // Esegui il comando e cattura il codice di ritorno
+  // Non è necessario catturare l'output testuale, ma il formato della funzione lo richiede
+  Exec('sc.exe', 'query "' + ServiceName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  // Il servizio non esiste se il codice di errore è 1060
+  if ResultCode = 1060 then
+  begin
+    Result := True;
+  end;
 end;
 
 function StopAndDeleteService(): Boolean;
@@ -116,19 +157,24 @@ var
   ResultCode: Integer;
   Success: Boolean;
 begin
-  // Prova a fermare il servizio
-  Success := Exec('sc.exe', 'stop "' + ServiceName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := True
+  
+  if not IsServiceDeleted() then
+  begin
+    // Prova a fermare il servizio
+    Exec('sc.exe', 'stop "' + ServiceName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-  // Attendi che sia fermo (max 10 secondi)
-  Success := WaitForServiceToStop(10) and Success;
+    // Attendi che sia fermo (max 10 secondi)
+    Success := WaitForServiceToStop(10);
 
-  // Prova a eliminarlo
-  Success := Exec('sc.exe', 'delete "' + ServiceName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and Success;
+    // Prova a eliminarlo
+    Success := Exec('sc.exe', 'delete "' + ServiceName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and Success;
 
-  // Verifica che sia stato rimosso
-  Success := IsServiceDeleted() and Success;
+    // Verifica che sia stato rimosso
+    Success := IsServiceDeleted() and Success;
 
-  Result := Success;
+    Result := Success;
+  end;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
@@ -137,6 +183,7 @@ begin
   begin
     if not StopAndDeleteService() then
       MsgBox('Impossibile fermare o rimuovere il servizio "' + ServiceName + '". Assicurati di avere i permessi necessari.', mbError, MB_OK);
+    RemoveFirewallException(ExpandConstant('{app}\')+'{#MyAppExeName}');
   end;
 end;
 
@@ -147,6 +194,8 @@ begin
     if not StopAndDeleteService() then
       MsgBox('Impossibile fermare il servizio. Assicurati di avere i permessi necessari.', mbError, MB_OK);
   end;
+  if CurStep=ssPostInstall then
+      SetFirewallException('{#MyAppName}', ExpandConstant('{app}\')+'{#MyAppExeName}');
 end;
 
 // SetElevationBit procedure link https://stackoverflow.com/a/44082068/1145281
