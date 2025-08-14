@@ -65,6 +65,41 @@ Name: "AvvioAutomatico"; Description: "Il servizio verrà avviato automaticamente
 [Code]
 const
   ServiceName = '{#MyServiceName}';
+  NET_FW_SCOPE_ALL = 0;
+  NET_FW_IP_VERSION_ANY = 2;
+
+procedure SetFirewallException(AppName,FileName:string);
+var
+  FirewallObject: Variant;
+  FirewallManager: Variant;
+  FirewallProfile: Variant;
+begin
+  try
+    FirewallObject := CreateOleObject('HNetCfg.FwAuthorizedApplication');
+    FirewallObject.ProcessImageFileName := FileName;
+    FirewallObject.Name := AppName;
+    FirewallObject.Scope := NET_FW_SCOPE_ALL;
+    FirewallObject.IpVersion := NET_FW_IP_VERSION_ANY;
+    FirewallObject.Enabled := True;
+    FirewallManager := CreateOleObject('HNetCfg.FwMgr');
+    FirewallProfile := FirewallManager.LocalPolicy.CurrentProfile;
+    FirewallProfile.AuthorizedApplications.Add(FirewallObject);
+  except
+  end;
+end;
+
+procedure RemoveFirewallException( FileName:string );
+var
+  FirewallManager: Variant;
+  FirewallProfile: Variant;
+begin
+  try
+    FirewallManager := CreateOleObject('HNetCfg.FwMgr');
+    FirewallProfile := FirewallManager.LocalPolicy.CurrentProfile;
+    FireWallProfile.AuthorizedApplications.Remove(FileName);
+  except
+  end;
+end;
 
 function ExecAndCapture(const CmdLine: string; var Output: TExecOutput): Boolean;
 var
@@ -116,10 +151,10 @@ var
   Success: Boolean;
 begin
   // Prova a fermare il servizio
-  Success := Exec('sc.exe', 'stop "' + ServiceName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('sc.exe', 'stop "' + ServiceName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-  // Attendi che sia fermo (max 10 secondi)
-  Success := WaitForServiceToStop(10) and Success;
+  // Attendi che sia fermo (max 20 secondi)
+  Success := WaitForServiceToStop(20);
 
   // Prova a eliminarlo
   Success := Exec('sc.exe', 'delete "' + ServiceName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and Success;
@@ -136,6 +171,7 @@ begin
   begin
     if not StopAndDeleteService() then
       MsgBox('Impossibile fermare o rimuovere il servizio "' + ServiceName + '". Assicurati di avere i permessi necessari.', mbError, MB_OK);
+    RemoveFirewallException(ExpandConstant('{app}\')+'{#MyAppExeName}');
   end;
 end;
 
@@ -146,6 +182,8 @@ begin
     if not StopAndDeleteService() then
       MsgBox('Impossibile fermare il servizio. Assicurati di avere i permessi necessari.', mbError, MB_OK);
   end;
+  if CurStep=ssPostInstall then
+      SetFirewallException('{#MyAppName}', ExpandConstant('{app}\')+'{#MyAppExeName}');
 end;
 
 // SetElevationBit procedure link https://stackoverflow.com/a/44082068/1145281
