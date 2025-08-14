@@ -1,8 +1,9 @@
 #define MyAppName "SimpleHttpServer"
-#define MyAppVersion "0.0.4"
 #define MyAppPublisher "Enycs"
 #define MyAppURL "http://www.enycs.com/"
 #define MyAppExeName "SimpleHttpServer.exe"
+#define MyAppPath "dist\" + MyAppExeName
+#define MyAppVersion GetVersionNumbersString(MyAppPath)
 #define MyWebFolder "public"
 #define MyLogFolder "log"
 #define MyAppDescription "Simple Http Server"
@@ -59,8 +60,8 @@ Type: filesandordirs; Name: "{app}"
 Type: dirifempty; Name: "{#MyAppPublisher}"
 
 [Tasks]
-Name: "AvvioManuale"; Description: "Il servizio dovrà essere avviato manualmente"; Flags: exclusive
-Name: "AvvioAutomatico"; Description: "Il servizio verrà avviato automaticamente al boot"; Flags: exclusive unchecked
+Name: "AvvioManuale"; Description: "Il servizio dovrï¿½ essere avviato manualmente"; Flags: exclusive
+Name: "AvvioAutomatico"; Description: "Il servizio verrï¿½ avviato automaticamente al boot"; Flags: exclusive unchecked
 
 [Code]
 const

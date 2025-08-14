@@ -9,17 +9,16 @@ import win32service
 import win32event
 import servicemanager
 import socket
-import time
 import sys
 from datetime import datetime
+import version
 
 from Cinema import Cinema
 from ThreadingHTTPServerWithArgs import ThreadingHTTPServerWithArgs
 
-VERSION="0.0.4"
-
 default_values = {
-    "httpPort": 8000
+    "httpPort": 8000,
+    "httpAddress": "localhost"
 }
 
 current_dir = os.path.dirname(sys.executable)
@@ -42,13 +41,20 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
         serviceLogger.info(format % args)
         
     def do_GET(self):
+
+        if self.path == '/version':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            self.wfile.write(bytes(f"SimpleHttpService: {version.SIMPLEHTTPSERVICE_VERSION}", "utf8"))
+            return
         # Controlla se l'URL richiesto è quello della nostra pagina dinamica
         cinema = None
         service = None
         try:
             cinema, service = self.path[1:].split('/') 
         except Exception as e:
-            pass
+            pass        
         if cinema in  self.cinema_instances and service in ['films', 'sale']:
             # Prepara e invia la risposta per la pagina dinamica
             self.send_response(200)
@@ -133,6 +139,7 @@ class SimpleHttpService(win32serviceutil.ServiceFramework):
         config.read(current_dir + '\\config.ini')
 
         httpPort = int(config['DEFAULT']['httpPort'])
+        httpAddress = config['DEFAULT']['httpAddress']
         
         for section in config.sections():
             if not section.startswith('DEFAULT'):
@@ -149,8 +156,8 @@ class SimpleHttpService(win32serviceutil.ServiceFramework):
 
         while not self.stop_event.is_set():
             try:
-                self.server = ThreadingHTTPServerWithArgs(('localhost', httpPort), MyRequestHandler, self.cinema_data_managers)
-                self.log.info(f'Serving on port {httpPort} from "{web_folder}"')
+                self.server = ThreadingHTTPServerWithArgs((httpAddress, httpPort), MyRequestHandler, self.cinema_data_managers)
+                self.log.info(f'Serving on interface {httpAddress} port {httpPort} from "{web_folder}"')
                 self.server.serve_forever()
             except Exception as e:
                 self.log.info(f"Error starting HTTP server: {e}")

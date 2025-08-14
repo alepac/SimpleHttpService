@@ -1,7 +1,8 @@
 sc create SimpleHttpServer binpath= C:\Users\Leonardo\Documents\Projects\SimpleHttpServer\dist\SimpleHttpServer.exe
 sc delete SimpleHttpServer
 
-# Build:
+# Build with powershell:
+.venv\Scripts\python .\create_version.py -o version.txt -v (type version.py) -n SimpleHttpService
 pyinstaller.exe --onefile --hidden-import win32timezone SimpleHttpServer.py
 
 # With Administrator privilges

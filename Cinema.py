@@ -1,4 +1,5 @@
 import json
+import re
 import xml.etree.ElementTree as ET
 import time
 import threading
@@ -19,8 +20,8 @@ def parse_iso_datetime(iso_str):
         dt_local = dt.astimezone(local_tz)
 
         # Estrazione di data e ora come stringhe
-        date_str = dt_local.strftime("%Y-%m-%d")
-        time_str = dt_local.strftime("%H:%M:%S")
+        date_str = dt_local.strftime("%d/%m/%Y")
+        time_str = dt_local.strftime("%H:%M")
         diff_minutes = int((dt_local - mytime).total_seconds() / 60)
 
 
@@ -51,8 +52,24 @@ class Cinema:
         self._thread = None
         self._running = False
         self._lock = threading.Lock()
+        self.custom_element = {
+            "theater_name": self._handle_theater_name
+        }
+
+    def _handle_theater_name(self, name, json_data, parent):
+        text = str(json_data)
+        element = ET.SubElement(parent, name)            
+        element.text = text        
+        match = re.search(r'(\d+)$', text)
+        if match:
+            element = ET.SubElement(parent, "theater_name_id")            
+            element.text = match.group(1)
+
 
     def _append_rss_elements(self, name, json_data, parent):
+        if name == 'item' and parent.tag == 'item':
+            element = ET.SubElement(parent, 'dummy')            
+            element.text = ' '
         if isinstance(json_data, list):
             for data in json_data:
                 item = ET.SubElement(parent, name)
@@ -60,6 +77,8 @@ class Cinema:
         elif isinstance(json_data, dict):
             for key, value in json_data.items():
                 self._append_rss_elements(key,value,parent)
+        elif name in self.custom_element:
+            self.custom_element[name](name, json_data, parent)
         else:
             text = str(json_data)
             date, time, delta = parse_iso_datetime(text)
@@ -72,7 +91,7 @@ class Cinema:
                 element.text = str(delta)
             else:
                 element = ET.SubElement(parent, name)            
-                element.text = str(json_data)
+                element.text = text
 
 
     def _convert_json_to_rss(self, json_data, main):
