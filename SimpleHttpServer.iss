@@ -1,5 +1,5 @@
 #define MyAppName "SimpleHttpServer"
-#define MyAppVersion "0.0.4"
+#define MyAppVersion "0.0.5"
 #define MyAppPublisher "Enycs"
 #define MyAppURL "http://www.enycs.com/"
 #define MyAppExeName "SimpleHttpServer.exe"
