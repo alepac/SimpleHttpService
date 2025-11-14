@@ -1,5 +1,5 @@
 #define MyAppName "SimpleHttpServer"
-#define MyAppVersion "0.0.5"
+#define MyAppVersion "0.0.6"
 #define MyAppPublisher "Enycs"
 #define MyAppURL "http://www.enycs.com/"
 #define MyAppExeName "SimpleHttpServer.exe"
@@ -141,10 +141,10 @@ var
 begin
   Result := False;
   // Esegui il comando e cattura il codice di ritorno
-  // Non è necessario catturare l'output testuale, ma il formato della funzione lo richiede
+  // Non ï¿½ necessario catturare l'output testuale, ma il formato della funzione lo richiede
   Exec('sc.exe', 'query "' + ServiceName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-  // Il servizio non esiste se il codice di errore è 1060
+  // Il servizio non esiste se il codice di errore ï¿½ 1060
   if ResultCode = 1060 then
   begin
     Result := True;

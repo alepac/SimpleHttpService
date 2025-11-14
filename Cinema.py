@@ -134,15 +134,15 @@ class Cinema:
         except requests.exceptions.RequestException as e:
             error_message = f"Errore durante la richiesta HTTP all'URL {http_url}: {e}"
             self.logger.error(error_message)
-            return f"<error>{error_message}</error>"
+            return None
         except json.JSONDecodeError:
             error_message = f"Errore di decodifica JSON dalla risposta dell'URL {http_url}"
             self.logger.error(error_message)
-            return f"<error>{error_message}</error>"
+            return None
         except Exception as e:
             error_message = f"Errore generico durante il polling: {e}"
             self.logger.error(error_message)
-            return f"<error>{error_message}</error>"
+            return None
 
     def _poll_thread(self):
         """
@@ -152,6 +152,9 @@ class Cinema:
 
         while self._running:
             data = self._poll_data(self.films_url)
+            if data == None:
+                time.sleep(self.interval)
+                continue
             xml_data = self._convert_dict_to_rss(data, 'films')
             with self._lock:
                 self._films_content = xml_data

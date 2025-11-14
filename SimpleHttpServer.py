@@ -155,7 +155,7 @@ class SimpleHttpService(win32serviceutil.ServiceFramework):
 
         while not self.stop_event.is_set():
             try:
-                self.server = ThreadingHTTPServerWithArgs(('localhost', httpPort), MyRequestHandler, self.cinema_data_managers)
+                self.server = ThreadingHTTPServerWithArgs(('0.0.0.0', httpPort), MyRequestHandler, self.cinema_data_managers)
                 self.log.info(f'Serving on port {httpPort} from "{web_folder}"')
                 self.server.serve_forever()
             except Exception as e:
