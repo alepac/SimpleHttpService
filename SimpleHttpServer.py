@@ -55,21 +55,25 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
             cinema, service = self.path[1:].split('/') 
         except Exception as e:
             pass
-        if cinema in  self.cinema_instances and service in ['films', 'sale','json']:
+        if cinema in  self.cinema_instances and service in ['films', 'sale','films_json','db']:
             # Prepara e invia la risposta per la pagina dinamica
             self.send_response(200)
             self.send_header('Access-Control-Allow-Origin','*')
-            if service == "json":
+            if service == "films_json":
                 self.send_header('Content-type', 'application/json')
                 self.end_headers()
-                self.wfile.write(bytes(self.cinema_instances[cinema].getContent(), "utf8"))
+                self.wfile.write(bytes(self.cinema_instances[cinema].getFilmsJson(), "utf8"))
+            if service == "db":
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(bytes(self.cinema_instances[cinema].getDbJson(), "utf8"))
             else:
                 self.send_header('Content-type', 'text/xml')
                 self.end_headers()
                 if service == "films":
-                    self.wfile.write(bytes(self.cinema_instances[cinema].getFilmContent(), "utf8"))
+                    self.wfile.write(bytes(self.cinema_instances[cinema].getFilmsXml(), "utf8"))
                 else:
-                    self.wfile.write(bytes(self.cinema_instances[cinema].getSaleContent(), "utf8"))
+                    self.wfile.write(bytes(self.cinema_instances[cinema].getSaleXml(), "utf8"))
         else:
             # Per tutte le altre richieste, usa il comportamento predefinito
             super().do_GET()
@@ -152,12 +156,12 @@ class SimpleHttpService(win32serviceutil.ServiceFramework):
         
         for section in config.sections():
             if not section.startswith('DEFAULT'):
-                cinema_name = section
+                id = section
                 films_url = config[section]['films_url']
                 sale_url = config[section]['sale_url']
                 name = config[section]['name']
                 cinema_interval = int(config[section]['interval'])
-                self.cinema_data_managers[cinema_name] = Cinema(name = name, films_url=films_url, sale_url=sale_url, logger=serviceLogger, interval=cinema_interval)
+                self.cinema_data_managers[id] = Cinema(id = id, name = name, films_url=films_url, sale_url=sale_url, logger=serviceLogger, interval=cinema_interval, db_file=current_dir + '\\cinema.json')
         
         # Avvia i thread di polling
         for cinema_managed in self.cinema_data_managers.values():

@@ -1,3 +1,4 @@
 pyinstaller==6.15
 requests==2.31.0
+tinydb==4.8.2
 pywin32

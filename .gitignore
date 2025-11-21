@@ -4,3 +4,4 @@ build
 dist
 *.spec
 version.txt
+cinema.json

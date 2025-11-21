@@ -5,15 +5,48 @@ import time
 import threading
 import requests
 import logging
+from tinydb import TinyDB, Query
 
-from datetime import datetime
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta
+
+
+FILM_FIELDS = [
+    "id",
+    "title",
+    "playbill_path",
+    "playbill_mini_path",
+    "length",
+]
+
+OCCUPATION_FIELDS = [
+    "busy",
+    "total",
+    "start",
+    "theater_name"
+]
+
+SALE_FIELDS = [
+    ("name","theater_name"),
+    ("film_title", "title"),
+    ("start", "start"),
+    ("ends", "ends"),
+    ("opens", "opens"),
+    ("total_seats","total"),
+    ("now_entering","now_entering"),
+    ("playbill_url", "playbill_mini_path")
+
+]
+
+DATE_FIELDS = [
+    "start",
+    "ends",
+    "opens"
+]
 
 def parse_iso_datetime(iso_str):
     try:
         # Parsing della stringa ISO
         dt = datetime.fromisoformat(iso_str)
-
         # Conversione alla timezone locale
         mytime = datetime.now().astimezone()
         local_tz = mytime.tzinfo
@@ -26,7 +59,7 @@ def parse_iso_datetime(iso_str):
 
 
         return date_str, time_str, diff_minutes
-    except ValueError:
+    except:
         return None, None, None  # La stringa non è in formato ISO valido
 
 
@@ -34,7 +67,7 @@ class Cinema:
     """
     Una classe per gestire il polling di un URL JSON, convertirlo in XML e renderlo disponibile.
     """
-    def __init__(self, name, films_url, sale_url, logger, interval=10):
+    def __init__(self, id, name, films_url, sale_url, logger, db_file, interval=10):
         """
         Inizializza l'istanza della classe.
 
@@ -42,17 +75,20 @@ class Cinema:
         :param logger: Un'istanza del logger da utilizzare per i messaggi.
         :param interval: L'intervallo di tempo in secondi tra una richiesta e l'altra.
         """
+        self._id = id
         self.films_url = films_url
         self.sale_url = sale_url
         self.name = name
         self.logger = logger
         self.interval = interval
-        self._films_content = None
-        self._sale_content = None
-        self._content = None
+        self._filmsXml = None
+        self._saleXml = None
+        self._filmsJson = None
         self._thread = None
         self._running = False
         self._lock = threading.Lock()
+        self._db = TinyDB(db_file)
+        self._Film = Query()
         self.custom_element = {
             "theater_name": self._handle_name_id,
             "name": self._handle_name_id
@@ -145,6 +181,55 @@ class Cinema:
             self.logger.error(error_message)
             return None
 
+    def _flatern_sale(self, films):
+        retval = []
+        cinema = next(iter(films))
+        for f in films[cinema]:
+            id = next(iter(f))
+            film = { "id": id, "cinema": self.name, "cinema_id": self._id}
+            value = f[id]
+            for field, oField in SALE_FIELDS:
+                if oField in DATE_FIELDS:
+                    film[oField] = datetime.fromisoformat(value[field]).isoformat()
+                else:
+                    film[oField] = value[field]
+            retval.append(film)
+        return retval
+        
+
+    def _flatern_film(self, films):
+        retval = []
+        for f in films:
+            film = { "cinema": self.name, "cinema_id": self._id}
+            for ffield in FILM_FIELDS:
+                film[ffield] = f[ffield]
+            for o in f["film_occupations"]:
+                copy = film.copy()
+                for ofield in OCCUPATION_FIELDS:
+                    if ofield in DATE_FIELDS:
+                        copy[ofield] = datetime.fromisoformat(o[ofield]).isoformat()
+                    else:
+                        copy[ofield] = o[ofield]
+                retval.append(copy)
+        return retval
+    
+    def _insertUpdate(self, data):
+        for film in data:
+            found = self._db.search((self._Film.id == film['id']) & (self._Film.start == film['start']))
+            if found:
+                doc_id = found[0].doc_id
+                self._db.update(film, doc_ids=[doc_id])
+            else:
+                self._db.insert(film)
+
+    def _purgeDb(self):
+        limite = (datetime.now() - timedelta(hours=24)).isoformat()
+        self._db.remove(
+            (self._Film.cinema_id == self._id) &
+            self._Film.start.test(lambda s: s < limite) # type: ignore
+        )
+
+
     def _poll_thread(self):
         """
         Il metodo che verrà eseguito nel thread separato.
@@ -153,18 +238,24 @@ class Cinema:
 
         while self._running:
             data = self._poll_data(self.films_url)
-            if data == None:
-                time.sleep(self.interval)
-                continue
-            xml_data = self._convert_dict_to_rss(data, 'films')
+            if data != None:
+                flat = self._flatern_film(data['films'])
+                xml_data = self._convert_dict_to_rss(data, 'films')
+                with self._lock:
+                    self._insertUpdate(flat)
+                    self._filmsXml = xml_data
+                    self._filmsJson = json.dumps(data)          
+                self.logger.info(f"Dati aggiornati dall'URL: {self.films_url}")
+            data = self._poll_data(self.sale_url)
+            if data != None:
+                flat = self._flatern_sale(data)
+                xml_data = self._convert_dict_to_rss(data, self.name)
+                with self._lock:
+                    self._insertUpdate(flat)
+                    self._saleXml = xml_data            
+                self.logger.info(f"Dati aggiornati dall'URL: {self.sale_url}")
             with self._lock:
-                self._films_content = xml_data
-                self._content = json.dumps(data)          
-            self.logger.info(f"Dati aggiornati dall'URL: {self.films_url}")
-            xml_data = self._convert_dict_to_rss(self._poll_data(self.sale_url), self.name)
-            with self._lock:
-                self._sale_content = xml_data            
-            self.logger.info(f"Dati aggiornati dall'URL: {self.sale_url}")
+                self._purgeDb()
 
             time.sleep(self.interval)
 
@@ -190,24 +281,28 @@ class Cinema:
             self.logger.info("Thread di polling arrestato.")
         else:
             self.logger.warning("Il thread non è in esecuzione.")
+    
+    def getDbJson(self):
+        with self._lock:
+            return json.dumps(self._db.search(self._Film.cinema_id == self._id))
             
-    def getContent(self):
+    def getFilmsJson(self):
         """
         Restituisce il contenuto JSON aggiornato.
         """
         with self._lock:
-            return self._content
+            return self._filmsJson
 
-    def getFilmContent(self):
+    def getFilmsXml(self):
         """
         Restituisce il contenuto XML aggiornato.
         """
         with self._lock:
-            return self._films_content
+            return self._filmsXml
         
-    def getSaleContent(self):
+    def getSaleXml(self):
         """
         Restituisce il contenuto XML aggiornato.
         """
         with self._lock:
-            return self._sale_content
+            return self._saleXml
