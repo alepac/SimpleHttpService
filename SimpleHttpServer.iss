@@ -60,8 +60,8 @@ Type: filesandordirs; Name: "{app}"
 Type: dirifempty; Name: "{#MyAppPublisher}"
 
 [Tasks]
-Name: "AvvioManuale"; Description: "Il servizio dovrà essere avviato manualmente"; Flags: exclusive
-Name: "AvvioAutomatico"; Description: "Il servizio verrà avviato automaticamente al boot"; Flags: exclusive unchecked
+Name: "AvvioManuale"; Description: "Il servizio dovrï¿½ essere avviato manualmente"; Flags: exclusive
+Name: "AvvioAutomatico"; Description: "Il servizio verrï¿½ avviato automaticamente al boot"; Flags: exclusive unchecked
 
 [Code]
 const
@@ -141,10 +141,10 @@ var
 begin
   Result := False;
   // Esegui il comando e cattura il codice di ritorno
-  // Non è necessario catturare l'output testuale, ma il formato della funzione lo richiede
+  // Non ï¿½ necessario catturare l'output testuale, ma il formato della funzione lo richiede
   Exec('sc.exe', 'query "' + ServiceName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-  // Il servizio non esiste se il codice di errore è 1060
+  // Il servizio non esiste se il codice di errore ï¿½ 1060
   if ResultCode = 1060 then
   begin
     Result := True;

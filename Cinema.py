@@ -49,6 +49,7 @@ class Cinema:
         self.interval = interval
         self._films_content = None
         self._sale_content = None
+        self._content = None
         self._thread = None
         self._running = False
         self._lock = threading.Lock()
@@ -98,7 +99,7 @@ class Cinema:
                 element.text = text
 
 
-    def _convert_json_to_rss(self, json_data, main):
+    def _convert_dict_to_rss(self, json_data, main):
         """
         Converte un JSON con un array di film in un feed RSS 2.0.
         """
@@ -124,26 +125,25 @@ class Cinema:
             # Restituisci un XML di errore in caso di fallimento
             return f'<rss><channel><item><error>{e}</error></item></channel></rss>'
 
-    def _poll_data(self, http_url, main):
+    def _poll_data(self, http_url):
         try:
             response = requests.get(http_url, timeout=5)
             response.raise_for_status()  # Solleva un'eccezione per errori HTTP (4xx o 5xx)
             
-            json_data = response.json()
-            return self._convert_json_to_rss(json_data, main)
+            return response.json()
             
         except requests.exceptions.RequestException as e:
             error_message = f"Errore durante la richiesta HTTP all'URL {http_url}: {e}"
             self.logger.error(error_message)
-            return f"<error>{error_message}</error>"
+            return None
         except json.JSONDecodeError:
             error_message = f"Errore di decodifica JSON dalla risposta dell'URL {http_url}"
             self.logger.error(error_message)
-            return f"<error>{error_message}</error>"
+            return None
         except Exception as e:
             error_message = f"Errore generico durante il polling: {e}"
             self.logger.error(error_message)
-            return f"<error>{error_message}</error>"
+            return None
 
     def _poll_thread(self):
         """
@@ -152,11 +152,16 @@ class Cinema:
         """
 
         while self._running:
-            xml_data = self._poll_data(self.films_url, 'films')
+            data = self._poll_data(self.films_url)
+            if data == None:
+                time.sleep(self.interval)
+                continue
+            xml_data = self._convert_dict_to_rss(data, 'films')
             with self._lock:
-                self._films_content = xml_data            
+                self._films_content = xml_data
+                self._content = json.dumps(data)          
             self.logger.info(f"Dati aggiornati dall'URL: {self.films_url}")
-            xml_data = self._poll_data(self.sale_url, self.name)
+            xml_data = self._convert_dict_to_rss(self._poll_data(self.sale_url), self.name)
             with self._lock:
                 self._sale_content = xml_data            
             self.logger.info(f"Dati aggiornati dall'URL: {self.sale_url}")
@@ -185,6 +190,13 @@ class Cinema:
             self.logger.info("Thread di polling arrestato.")
         else:
             self.logger.warning("Il thread non è in esecuzione.")
+            
+    def getContent(self):
+        """
+        Restituisce il contenuto JSON aggiornato.
+        """
+        with self._lock:
+            return self._content
 
     def getFilmContent(self):
         """

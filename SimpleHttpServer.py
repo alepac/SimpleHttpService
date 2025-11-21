@@ -18,7 +18,7 @@ from ThreadingHTTPServerWithArgs import ThreadingHTTPServerWithArgs
 
 default_values = {
     "httpPort": 8000,
-    "httpAddress": "localhost"
+    "httpAddress": "0.0.0.0"
 }
 
 current_dir = os.path.dirname(sys.executable)
@@ -54,16 +54,22 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
         try:
             cinema, service = self.path[1:].split('/') 
         except Exception as e:
-            pass        
-        if cinema in  self.cinema_instances and service in ['films', 'sale']:
+            pass
+        if cinema in  self.cinema_instances and service in ['films', 'sale','json']:
             # Prepara e invia la risposta per la pagina dinamica
             self.send_response(200)
-            self.send_header('Content-type', 'text/xml')
-            self.end_headers()
-            if service == "films":
-                self.wfile.write(bytes(self.cinema_instances[cinema].getFilmContent(), "utf8"))
+            self.send_header('Access-Control-Allow-Origin','*')
+            if service == "json":
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(bytes(self.cinema_instances[cinema].getContent(), "utf8"))
             else:
-                self.wfile.write(bytes(self.cinema_instances[cinema].getSaleContent(), "utf8"))
+                self.send_header('Content-type', 'text/xml')
+                self.end_headers()
+                if service == "films":
+                    self.wfile.write(bytes(self.cinema_instances[cinema].getFilmContent(), "utf8"))
+                else:
+                    self.wfile.write(bytes(self.cinema_instances[cinema].getSaleContent(), "utf8"))
         else:
             # Per tutte le altre richieste, usa il comportamento predefinito
             super().do_GET()
