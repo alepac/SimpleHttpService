@@ -186,7 +186,7 @@ class Cinema:
         cinema = next(iter(films))
         for f in films[cinema]:
             id = next(iter(f))
-            film = { "id": id, "cinema": self.name, "cinema_id": self._id}
+            film = { "id": int(id), "cinema": self.name, "cinema_id": self._id}
             value = f[id]
             for field, oField in SALE_FIELDS:
                 if oField in DATE_FIELDS:
