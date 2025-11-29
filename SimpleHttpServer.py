@@ -63,7 +63,7 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Content-type', 'application/json')
                 self.end_headers()
                 self.wfile.write(bytes(self.cinema_instances[cinema].getFilmsJson(), "utf8"))
-            if service == "db":
+            elif service == "db":
                 self.send_header('Content-type', 'application/json')
                 self.end_headers()
                 self.wfile.write(bytes(self.cinema_instances[cinema].getDbJson(), "utf8"))
