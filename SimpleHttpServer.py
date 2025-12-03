@@ -161,7 +161,7 @@ class SimpleHttpService(win32serviceutil.ServiceFramework):
                 sale_url = config[section]['sale_url']
                 name = config[section]['name']
                 cinema_interval = int(config[section]['interval'])
-                self.cinema_data_managers[id] = Cinema(id = id, name = name, films_url=films_url, sale_url=sale_url, logger=serviceLogger, interval=cinema_interval, db_file=current_dir + '\\cinema.json')
+                self.cinema_data_managers[id] = Cinema(id = id, name = name, films_url=films_url, sale_url=sale_url, logger=serviceLogger, interval=cinema_interval, db_file=current_dir + '\\cinema_' + id +'.json')
         
         # Avvia i thread di polling
         for cinema_managed in self.cinema_data_managers.values():
