@@ -67,7 +67,7 @@ class Cinema:
     """
     Una classe per gestire il polling di un URL JSON, convertirlo in XML e renderlo disponibile.
     """
-    def __init__(self, id, name, films_url, sale_url, logger, db_file, interval=10):
+    def __init__(self, id, name, films_url, sale_url, logger, db_file, remove_future, films_interval=60, sale_interval=60):
         """
         Inizializza l'istanza della classe.
 
@@ -76,11 +76,15 @@ class Cinema:
         :param interval: L'intervallo di tempo in secondi tra una richiesta e l'altra.
         """
         self._id = id
+        self.remove_future = remove_future
         self.films_url = films_url
         self.sale_url = sale_url
         self.name = name
         self.logger = logger
-        self.interval = interval
+        self.films_interval = films_interval
+        self.sale_interval = sale_interval
+        self.last_films_poll = None
+        self.last_sale_poll = None
         self._filmsXml = None
         self._saleXml = None
         self._filmsJson = None
@@ -214,6 +218,13 @@ class Cinema:
         return retval
     
     def _insertUpdate(self, data):
+        if self.remove_future:
+            # remove future film to avoid duplication in case of changes
+            limite = datetime.now().isoformat()
+            self._db.remove(
+                (self._Film.cinema_id == self._id) &
+                self._Film.start.test(lambda s: s > limite) # type: ignore
+            )
         for film in data:
             found = self._db.search((self._Film.id == film['id']) & (self._Film.start == film['start']))
             if found:
@@ -222,7 +233,7 @@ class Cinema:
             else:
                 self._db.insert(film)
 
-    def _purgeDb(self):
+    def _purgeOldDb(self):
         limite = (datetime.now() - timedelta(hours=24)).isoformat()
         self._db.remove(
             (self._Film.cinema_id == self._id) &
@@ -237,27 +248,31 @@ class Cinema:
         """
 
         while self._running:
-            data = self._poll_data(self.films_url)
-            if data != None:
-                flat = self._flatern_film(data['films'])
-                xml_data = self._convert_dict_to_rss(data, 'films')
-                with self._lock:
-                    self._insertUpdate(flat)
-                    self._filmsXml = xml_data
-                    self._filmsJson = json.dumps(data)          
-                self.logger.info(f"Dati aggiornati dall'URL: {self.films_url}")
-            data = self._poll_data(self.sale_url)
-            if data != None:
-                flat = self._flatern_sale(data)
-                xml_data = self._convert_dict_to_rss(data, self.name)
-                with self._lock:
-                    self._insertUpdate(flat)
-                    self._saleXml = xml_data            
-                self.logger.info(f"Dati aggiornati dall'URL: {self.sale_url}")
+            now = datetime.now()
+            if self.last_films_poll == None or ((now - self.last_films_poll).total_seconds()) > self.films_interval:
+                self.last_films_poll = now
+                data = self._poll_data(self.films_url)
+                if data != None:
+                    flat = self._flatern_film(data['films'])
+                    xml_data = self._convert_dict_to_rss(data, 'films')
+                    with self._lock:
+                        self._insertUpdate(flat)
+                        self._filmsXml = xml_data
+                        self._filmsJson = json.dumps(data)          
+                    self.logger.info(f"Dati aggiornati dall'URL: {self.films_url}")
+            if self.last_sale_poll == None or ((now - self.last_sale_poll).total_seconds()) > self.sale_interval:
+                self.last_sale_poll = now
+                data = self._poll_data(self.sale_url)
+                if data != None:
+                    flat = self._flatern_sale(data)
+                    xml_data = self._convert_dict_to_rss(data, self.name)
+                    with self._lock:
+                        self._insertUpdate(flat)
+                        self._saleXml = xml_data            
+                    self.logger.info(f"Dati aggiornati dall'URL: {self.sale_url}")
             with self._lock:
-                self._purgeDb()
-
-            time.sleep(self.interval)
+                self._purgeOldDb()
+            time.sleep(1)
 
     def start(self):
         """
