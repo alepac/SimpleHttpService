@@ -67,7 +67,7 @@ class Cinema:
     """
     Una classe per gestire il polling di un URL JSON, convertirlo in XML e renderlo disponibile.
     """
-    def __init__(self, id, name, films_url, sale_url, logger, db_file, remove_future, films_interval=60, sale_interval=60):
+    def __init__(self, id, name, films_url, sale_url, logger, db_file, films_interval=60, sale_interval=60):
         """
         Inizializza l'istanza della classe.
 
@@ -76,7 +76,6 @@ class Cinema:
         :param interval: L'intervallo di tempo in secondi tra una richiesta e l'altra.
         """
         self._id = id
-        self.remove_future = remove_future
         self.films_url = films_url
         self.sale_url = sale_url
         self.name = name
@@ -218,13 +217,6 @@ class Cinema:
         return retval
     
     def _insertUpdate(self, data):
-        if self.remove_future:
-            # remove future film to avoid duplication in case of changes
-            limite = datetime.now().isoformat()
-            self._db.remove(
-                (self._Film.cinema_id == self._id) &
-                self._Film.start.test(lambda s: s > limite) # type: ignore
-            )
         for film in data:
             found = self._db.search((self._Film.id == film['id']) & (self._Film.start == film['start']))
             if found:
@@ -258,7 +250,7 @@ class Cinema:
                     with self._lock:
                         self._insertUpdate(flat)
                         self._filmsXml = xml_data
-                        self._filmsJson = json.dumps(data)          
+                        self._filmsJson = json.dumps(data)
                     self.logger.info(f"Dati aggiornati dall'URL: {self.films_url}")
             if self.last_sale_poll == None or ((now - self.last_sale_poll).total_seconds()) > self.sale_interval:
                 self.last_sale_poll = now
