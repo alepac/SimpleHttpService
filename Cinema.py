@@ -225,11 +225,14 @@ class Cinema:
             else:
                 self._db.insert(film)
 
-    def _purgeOldDb(self):
-        limite = (datetime.now() - timedelta(hours=24)).isoformat()
+    def _purgeDb(self):
+        limite1 = (datetime.now() - timedelta(hours=24)).isoformat()
+        limite2 = datetime.now().isoformat()
         self._db.remove(
-            (self._Film.cinema_id == self._id) &
-            self._Film.start.test(lambda s: s < limite) # type: ignore
+            (self._Film.cinema_id == self._id) & (
+                self._Film.start.test(lambda s: s < limite1) | # type: ignore
+                self._Film.start.test(lambda s: s > limite2) # type: ignore
+            )
         )
 
 
@@ -241,29 +244,32 @@ class Cinema:
 
         while self._running:
             now = datetime.now()
+            flat = []
+            purgeNeeded = False
             if self.last_films_poll == None or ((now - self.last_films_poll).total_seconds()) > self.films_interval:
                 self.last_films_poll = now
                 data = self._poll_data(self.films_url)
                 if data != None:
-                    flat = self._flatern_film(data['films'])
+                    purgeNeeded = True
+                    flat.extend(self._flatern_film(data['films']))
                     xml_data = self._convert_dict_to_rss(data, 'films')
                     with self._lock:
-                        self._insertUpdate(flat)
                         self._filmsXml = xml_data
                         self._filmsJson = json.dumps(data)
                     self.logger.info(f"Dati aggiornati dall'URL: {self.films_url}")
-            if self.last_sale_poll == None or ((now - self.last_sale_poll).total_seconds()) > self.sale_interval:
+            if purgeNeeded or self.last_sale_poll == None or ((now - self.last_sale_poll).total_seconds()) > self.sale_interval:
                 self.last_sale_poll = now
                 data = self._poll_data(self.sale_url)
                 if data != None:
-                    flat = self._flatern_sale(data)
+                    flat.extend(self._flatern_sale(data))
                     xml_data = self._convert_dict_to_rss(data, self.name)
                     with self._lock:
-                        self._insertUpdate(flat)
                         self._saleXml = xml_data            
                     self.logger.info(f"Dati aggiornati dall'URL: {self.sale_url}")
             with self._lock:
-                self._purgeOldDb()
+                if purgeNeeded:
+                    self._purgeDb()
+                self._insertUpdate(flat)
             time.sleep(1)
 
     def start(self):
