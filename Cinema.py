@@ -67,7 +67,7 @@ class Cinema:
     """
     Una classe per gestire il polling di un URL JSON, convertirlo in XML e renderlo disponibile.
     """
-    def __init__(self, id, name, films_url, sale_url, logger, db_file, films_interval=60, sale_interval=60):
+    def __init__(self, id, name, films_url, sale_url, logger, db_file, password, films_interval=60, sale_interval=60):
         """
         Inizializza l'istanza della classe.
 
@@ -76,6 +76,7 @@ class Cinema:
         :param interval: L'intervallo di tempo in secondi tra una richiesta e l'altra.
         """
         self._id = id
+        self._password = password
         self.films_url = films_url
         self.sale_url = sale_url
         self.name = name
@@ -90,7 +91,8 @@ class Cinema:
         self._thread = None
         self._running = False
         self._lock = threading.Lock()
-        self._db = TinyDB(db_file)
+        self._db = TinyDB(f'{db_file}.json')
+        self._confFile = f'{db_file}_conf.json'
         self._Film = Query()
         self.custom_element = {
             "theater_name": self._handle_name_id,
@@ -298,6 +300,22 @@ class Cinema:
     def getDbJson(self):
         with self._lock:
             return json.dumps(self._db.search(self._Film.cinema_id == self._id))
+        
+    def getParamsJson(self):        
+        with self._lock:
+            with open(self._confFile, 'r', encoding='utf-8') as f:
+                try:
+                    data = json.load(f) or {}
+                except:
+                    data = {}
+                return json.dumps(data)
+        
+    def setParamsJson(self, content):
+        with self._lock:
+            data = json.loads(content)
+            print(f'my data {data}')
+            with open(self._confFile, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=4, ensure_ascii=False)
             
     def getFilmsJson(self):
         """

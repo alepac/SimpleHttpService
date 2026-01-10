@@ -12,6 +12,7 @@ import socket
 import sys
 from datetime import datetime
 import version
+import json
 
 from Cinema import Cinema
 from ThreadingHTTPServerWithArgs import ThreadingHTTPServerWithArgs
@@ -40,8 +41,76 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         serviceLogger.info(format % args)
         
-    def do_GET(self):
+    def end_headers(self):
+        # Aggiunge l'header CORS a ogni risposta (GET, POST, ecc.)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Requested-With')
+        super().end_headers()
+    
+    def do_OPTIONS(self):
+        # Risponde alla richiesta preflight del browser
+        self.send_response(200, "ok")
+        self.end_headers()
+        
+    def checkAuth(self, cinema):
+        auth_header = self.headers.get('Authorization')
+        # 2. Verifica se l'header è presente e corretto
+        if auth_header != self.cinema_instances[cinema]._password:
+            # Se la password è sbagliata o assente
+            self.send_response(401) # 401 Unauthorized
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            response = {"status": "error", "msg": "Accesso negato: password errata"}
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+            return False
+        return True
+    
+    def getCinema(self):
+                # Controlla se l'URL richiesto è quello della nostra pagina dinamica
+        cinema = None
+        service = None
+        try:
+            cinema, service = self.path[1:].split('/') 
+        except Exception as e:
+            pass
+        return cinema, service
+        
+    def do_POST(self):
+        
+        cinema, service = self.getCinema() 
+        # 1. Verifica autorizzazione (opzionale, come per la GET)
+        if not self.checkAuth(cinema):
+            return
+        
+        if cinema in  self.cinema_instances:
+            # 2. Leggi la lunghezza del corpo della richiesta
+            content_length = int(self.headers.get('Content-Length', 0))
+            
+            # 3. Leggi i dati dal buffer
+            post_data = self.rfile.read(content_length)
+            
+            try:
+                data = post_data.decode('utf-8')
+                # 4. Decodifica i byte in stringa e poi in JSON (dizionario Python)
+                self.cinema_instances[cinema].setParamsJson(data)
+                
+                
+                # 5. Risposta al client
+                self.send_response(201) # 201 Created è standard per le POST
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                
+                response = {"status": "success", "received": data}
+                self.wfile.write(json.dumps(response).encode('utf-8'))
 
+            except json.JSONDecodeError:
+                # Se il corpo non è un JSON valido
+                self.send_response(400) # Bad Request
+                self.end_headers()
+                self.wfile.write(b'{"status": "error", "message": "Invalid JSON"}')
+        
+    def do_GET(self):
         if self.path == '/version':
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
@@ -49,31 +118,40 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(bytes(f"SimpleHttpService: {version.SIMPLEHTTPSERVICE_VERSION}", "utf8"))
             return
         # Controlla se l'URL richiesto è quello della nostra pagina dinamica
-        cinema = None
-        service = None
-        try:
-            cinema, service = self.path[1:].split('/') 
-        except Exception as e:
-            pass
-        if cinema in  self.cinema_instances and service in ['films', 'sale','films_json','db']:
+        cinema, service = self.getCinema() 
+        if cinema in  self.cinema_instances:
             # Prepara e invia la risposta per la pagina dinamica
-            self.send_response(200)
-            self.send_header('Access-Control-Allow-Origin','*')
-            if service == "films_json":
+
+            if service == "get_param":
+                if not self.checkAuth(cinema):
+                    return
+                self.send_response(200)
                 self.send_header('Content-type', 'application/json')
                 self.end_headers()
-                self.wfile.write(bytes(self.cinema_instances[cinema].getFilmsJson(), "utf8"))
-            elif service == "db":
-                self.send_header('Content-type', 'application/json')
-                self.end_headers()
-                self.wfile.write(bytes(self.cinema_instances[cinema].getDbJson(), "utf8"))
+                self.wfile.write(bytes(self.cinema_instances[cinema].getParamsJson(), "utf8"))
             else:
-                self.send_header('Content-type', 'text/xml')
-                self.end_headers()
-                if service == "films":
-                    self.wfile.write(bytes(self.cinema_instances[cinema].getFilmsXml(), "utf8"))
+                self.send_response(200)
+                if service == "dashboard":
+                    # Path override
+                    self.path = '/sdc.xml'
+                    super().do_GET()
+                elif service == "films_json":
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(bytes(self.cinema_instances[cinema].getFilmsJson(), "utf8"))
+                elif service == "db":
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(bytes(self.cinema_instances[cinema].getDbJson(), "utf8"))
                 else:
-                    self.wfile.write(bytes(self.cinema_instances[cinema].getSaleXml(), "utf8"))
+                    self.send_header('Content-type', 'text/xml')
+                    self.end_headers()
+                    if service == "films":
+                        self.wfile.write(bytes(self.cinema_instances[cinema].getFilmsXml(), "utf8"))
+                    elif service == "sale":
+                        self.wfile.write(bytes(self.cinema_instances[cinema].getSaleXml(), "utf8"))
+                    else: 
+                        super().do_GET()
         else:
             # Per tutte le altre richieste, usa il comportamento predefinito
             super().do_GET()
@@ -157,12 +235,22 @@ class SimpleHttpService(win32serviceutil.ServiceFramework):
         for section in config.sections():
             if not section.startswith('DEFAULT'):
                 id = section
+                password = config[section]['password']
                 films_url = config[section]['films_url']
                 sale_url = config[section]['sale_url']
                 name = config[section]['name']
                 films_interval = int(config[section]['films_interval'])
                 sale_interval = int(config[section]['sale_interval'])
-                self.cinema_data_managers[id] = Cinema(id = id, name = name, films_url=films_url, sale_url=sale_url, logger=serviceLogger, films_interval=films_interval, sale_interval=sale_interval, db_file=current_dir + '\\cinema_' + id +'.json')
+                self.cinema_data_managers[id] = Cinema(
+                    id = id, 
+                    name = name, 
+                    films_url=films_url, 
+                    sale_url=sale_url, 
+                    logger=serviceLogger, 
+                    films_interval=films_interval, 
+                    sale_interval=sale_interval, 
+                    db_file=current_dir + '\\cinema_' + id,
+                    password=password)
         
         # Avvia i thread di polling
         for cinema_managed in self.cinema_data_managers.values():
