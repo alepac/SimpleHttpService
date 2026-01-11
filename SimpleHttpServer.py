@@ -71,7 +71,7 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
         cinema = None
         service = None
         try:
-            cinema, service = self.path[1:].split('/') 
+            cinema, service = self.path[1:].split('/')[:2] 
         except Exception as e:
             pass
         return cinema, service
@@ -133,7 +133,12 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_response(200)
                 if service == "dashboard":
                     # Path override
-                    self.path = '/sdc.xml'
+                    parts = [p for p in self.path.split('/') if p]
+                    # Uniamo tutto tranne il primo elemento
+                    ends = ''
+                    if self.path.endswith('/'):
+                        ends = '/'
+                    self.path = '/' + '/'.join(parts[1:]) + ends
                     super().do_GET()
                 elif service == "films_json":
                     self.send_header('Content-type', 'application/json')
@@ -236,6 +241,7 @@ class SimpleHttpService(win32serviceutil.ServiceFramework):
             if not section.startswith('DEFAULT'):
                 id = section
                 password = config[section]['password']
+                numero_sale = int(config[section]['numero_sale'])
                 films_url = config[section]['films_url']
                 sale_url = config[section]['sale_url']
                 name = config[section]['name']
@@ -250,7 +256,8 @@ class SimpleHttpService(win32serviceutil.ServiceFramework):
                     films_interval=films_interval, 
                     sale_interval=sale_interval, 
                     db_file=current_dir + '\\cinema_' + id,
-                    password=password)
+                    password=password,
+                    numero_sale=numero_sale)
         
         # Avvia i thread di polling
         for cinema_managed in self.cinema_data_managers.values():

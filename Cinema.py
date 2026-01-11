@@ -67,7 +67,7 @@ class Cinema:
     """
     Una classe per gestire il polling di un URL JSON, convertirlo in XML e renderlo disponibile.
     """
-    def __init__(self, id, name, films_url, sale_url, logger, db_file, password, films_interval=60, sale_interval=60):
+    def __init__(self, id, name, films_url, sale_url, logger, db_file, password, numero_sale, films_interval=60, sale_interval=60):
         """
         Inizializza l'istanza della classe.
 
@@ -77,6 +77,7 @@ class Cinema:
         """
         self._id = id
         self._password = password
+        self._numero_sale = numero_sale
         self.films_url = films_url
         self.sale_url = sale_url
         self.name = name
@@ -299,23 +300,35 @@ class Cinema:
     
     def getDbJson(self):
         with self._lock:
-            return json.dumps(self._db.search(self._Film.cinema_id == self._id))
+            return json.dumps(self._db.search(self._Film.cinema_id == self._id))      
         
-    def getParamsJson(self):        
-        with self._lock:
+    def getStoredConfig(self):
             with open(self._confFile, 'r', encoding='utf-8') as f:
                 try:
                     data = json.load(f) or {}
                 except:
                     data = {}
-                return json.dumps(data)
+                return data
+
+    def getParamsJson(self):
+        with self._lock:
+            data =  self.getStoredConfig()
+            data['numeroSale'] = self._numero_sale
+            return json.dumps(data)
         
     def setParamsJson(self, content):
         with self._lock:
             data = json.loads(content)
-            print(f'my data {data}')
+            print(f'Received {data}')
+            total_data = self.getStoredConfig()
+            if "roomIndex" in data:
+                if "roomsConfigs" not in total_data:
+                    total_data["roomsConfigs"] = {}
+                total_data["roomsConfigs"][data["roomIndex"]] = data["config"]
+            else:
+                total_data.update(data)
             with open(self._confFile, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=4, ensure_ascii=False)
+                json.dump(total_data, f, indent=4, ensure_ascii=False)
             
     def getFilmsJson(self):
         """
