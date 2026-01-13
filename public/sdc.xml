@@ -1,13 +1,25 @@
 <rss version="2.0">
-    <channel>
-        <title>Eliminacode</title>
-        <description>Questa pagina un eliminacode</description>
-        <item>
-            <presenza>10</presenza>
-            <bottone1>0</bottone1>
-            <bottone2>0</bottone2>
-            <bottone3>0</bottone3>
-            <bottone4>0</bottone4>
-        </item>
-    </channel>
-</rss>
+            <channel>
+                <title>SDC</title>
+                <description>SENSOR DRIVEN CONTENT</description>
+                <item>
+                    <presenza>100</presenza>
+                    <bottone1>0</bottone1>
+                    <bottone2>0</bottone2>
+                    <bottone3>0</bottone3>
+                    <bottone4>0</bottone4>
+                    <rfid1>0</rfid1>
+                    <rfid2>0</rfid2>
+                    <rfid3>0</rfid3>
+                    <rfid4>0</rfid4>
+                    <rfid5>0</rfid5>
+                    <rfid6>0</rfid6>
+                    <rfid7>0</rfid7>
+                    <rfid8>0</rfid8>
+                    <rfid9>0</rfid9>
+                    <rfid10>0</rfid10>
+                    <umidita>0</umidita>
+                    <temperatura>+00,0</temperatura>
+                </item>
+            </channel>
+        </rss>
