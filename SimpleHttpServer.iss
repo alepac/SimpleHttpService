@@ -36,7 +36,7 @@ PrivilegesRequired=poweruser
 [Files]
 Source: "dist/{#MyAppExeName}"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: replacesameversion
 Source: "config.ini"; DestDir: "{app}"
-Source: "{#MyWebFolder}/sdc.xml"; DestDir: "{app}/{#MyWebFolder}"
+Source: "{#MyWebFolder}/*"; DestDir: "{app}/{#MyWebFolder}"; Flags: recursesubdirs
 Source: "Enycs_512.ico"; DestDir: "{app}"
 
 ;[UninstallRun]
@@ -60,8 +60,8 @@ Type: filesandordirs; Name: "{app}"
 Type: dirifempty; Name: "{#MyAppPublisher}"
 
 [Tasks]
-Name: "AvvioManuale"; Description: "Il servizio dovrï¿½ essere avviato manualmente"; Flags: exclusive
-Name: "AvvioAutomatico"; Description: "Il servizio verrï¿½ avviato automaticamente al boot"; Flags: exclusive unchecked
+Name: "AvvioManuale"; Description: "Il servizio dovrà essere avviato manualmente"; Flags: exclusive
+Name: "AvvioAutomatico"; Description: "Il servizio verrà avviato automaticamente al boot"; Flags: exclusive unchecked
 
 [Code]
 const

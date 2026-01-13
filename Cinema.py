@@ -303,12 +303,12 @@ class Cinema:
             return json.dumps(self._db.search(self._Film.cinema_id == self._id))      
         
     def getStoredConfig(self):
-            with open(self._confFile, 'r', encoding='utf-8') as f:
-                try:
+            try:
+                with open(self._confFile, 'r', encoding='utf-8') as f:
                     data = json.load(f) or {}
-                except:
-                    data = {}
-                return data
+            except:
+                data = {}
+            return data
 
     def getParamsJson(self):
         with self._lock:
