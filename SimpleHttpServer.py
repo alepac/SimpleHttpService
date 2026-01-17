@@ -84,31 +84,44 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
             return
         
         if cinema in  self.cinema_instances:
-            # 2. Leggi la lunghezza del corpo della richiesta
-            content_length = int(self.headers.get('Content-Length', 0))
-            
-            # 3. Leggi i dati dal buffer
-            post_data = self.rfile.read(content_length)
-            
-            try:
-                data = post_data.decode('utf-8')
-                # 4. Decodifica i byte in stringa e poi in JSON (dizionario Python)
-                self.cinema_instances[cinema].setParamsJson(data)
-                
-                
-                # 5. Risposta al client
+            if service == 'force_update':
+                self.cinema_instances[cinema].forceDownload()
                 self.send_response(201) # 201 Created è standard per le POST
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 
-                response = {"status": "success", "received": data}
+                response = {"status": "success"}
                 self.wfile.write(json.dumps(response).encode('utf-8'))
+            elif service == 'set_param':
+                # 2. Leggi la lunghezza del corpo della richiesta
+                content_length = int(self.headers.get('Content-Length', 0))
+                
+                # 3. Leggi i dati dal buffer
+                post_data = self.rfile.read(content_length)
+                
+                try:
+                    data = post_data.decode('utf-8')
+                    # 4. Decodifica i byte in stringa e poi in JSON (dizionario Python)
+                    self.cinema_instances[cinema].setParamsJson(data)
+                    
+                    
+                    # 5. Risposta al client
+                    self.send_response(201) # 201 Created è standard per le POST
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    
+                    response = {"status": "success", "received": data}
+                    self.wfile.write(json.dumps(response).encode('utf-8'))
 
-            except json.JSONDecodeError:
-                # Se il corpo non è un JSON valido
+                except json.JSONDecodeError:
+                    # Se il corpo non è un JSON valido
+                    self.send_response(400) # Bad Request
+                    self.end_headers()
+                    self.wfile.write(b'{"status": "error", "message": "Invalid JSON"}')
+            else:
                 self.send_response(400) # Bad Request
                 self.end_headers()
-                self.wfile.write(b'{"status": "error", "message": "Invalid JSON"}')
+                self.wfile.write(b'{"status": "error", "message": "Invalid request"}')
         
     def do_GET(self):
         if self.path == '/version':
@@ -122,7 +135,12 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
         if cinema in  self.cinema_instances:
             # Prepara e invia la risposta per la pagina dinamica
 
-            if service == "get_param":
+            if self.path.endswith('dashboard'):
+                self.send_response(302)
+            
+                self.send_header('Location', self.path + '/')
+                self.end_headers()
+            elif service == "get_param":
                 if not self.checkAuth(cinema):
                     return
                 self.send_response(200)
@@ -144,10 +162,14 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
                     self.send_header('Content-type', 'application/json')
                     self.end_headers()
                     self.wfile.write(bytes(self.cinema_instances[cinema].getFilmsJson(), "utf8"))
-                elif service == "db":
+                elif service == "db": # legacy... to mantain for backward compatibility
                     self.send_header('Content-type', 'application/json')
                     self.end_headers()
                     self.wfile.write(bytes(self.cinema_instances[cinema].getDbJson(), "utf8"))
+                elif service == "db_config":
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(bytes(self.cinema_instances[cinema].getDbConfigJson(), "utf8"))
                 else:
                     self.send_header('Content-type', 'text/xml')
                     self.end_headers()

@@ -6,12 +6,34 @@
   <link rel="icon" type="image/svg+xml" href="./Enycs_512.png" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>cinemadashboard</title>
-  <script type="module" crossorigin src="./assets/index-B3aB_6Ss.js"></script>
+  <!-- <script>
+    (function () {
+      // Scegli qui la data che vuoi emulare
+      const fakeDateTime = new Date('2026-01-17T18:30:00').getTime();
+
+      // Salva i riferimenti originali
+      const OriginalDate = Date;
+
+      // Sovrascrivi il costruttore Date
+      globalThis.Date = class extends OriginalDate {
+        constructor(...args) {
+          if (args.length > 0) {
+            return new OriginalDate(...args);
+          }
+          return new OriginalDate(fakeDateTime);
+        }
+      };
+
+      // Sovrascrivi il metodo statico Date.now()
+      globalThis.Date.now = () => fakeDateTime;
+    })();
+  </script> -->
+  <script type="module" crossorigin src="./assets/index-BBDj_NCV.js"></script>
   <link rel="stylesheet" crossorigin href="./assets/index-DR-Dg8tk.css">
 </head>
 
 <body>
-  <div id="root"></div>
+  <div id="root"></div>
 </body>
 
 </html>

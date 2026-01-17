@@ -298,6 +298,13 @@ class Cinema:
         else:
             self.logger.warning("Il thread non è in esecuzione.")
     
+    def getDbConfigJson(self):
+        with self._lock:
+            data = {}
+            data['db'] = self._db.search(self._Film.cinema_id == self._id)
+            data['config'] = self.getStoredConfig()
+            return json.dumps(data)
+        
     def getDbJson(self):
         with self._lock:
             return json.dumps(self._db.search(self._Film.cinema_id == self._id))      
@@ -315,6 +322,9 @@ class Cinema:
             data =  self.getStoredConfig()
             data['numeroSale'] = self._numero_sale
             return json.dumps(data)
+        
+    def forceDownload(self):
+        self.last_films_poll = None
         
     def setParamsJson(self, content):
         with self._lock:
