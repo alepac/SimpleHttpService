@@ -324,7 +324,7 @@ class Cinema:
             if "roomIndex" in data:
                 if "roomsConfigs" not in total_data:
                     total_data["roomsConfigs"] = {}
-                total_data["roomsConfigs"][data["roomIndex"]] = data["config"]
+                total_data["roomsConfigs"][str(data["roomIndex"])] = data["config"]
             else:
                 total_data.update(data)
             with open(self._confFile, 'w', encoding='utf-8') as f:
