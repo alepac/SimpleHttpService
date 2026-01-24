@@ -16,6 +16,7 @@ FILM_FIELDS = [
     "playbill_path",
     "playbill_mini_path",
     "length",
+    "technologies"
 ]
 
 OCCUPATION_FIELDS = [
