@@ -5,6 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Compile",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "${workspaceFolder}/compile.ps1",
+            "cwd": "${cwd}"
+        },
+        {
             "name": "Python Debugger: SimpleHttpServer",
             "type": "debugpy",
             "request": "launch",
