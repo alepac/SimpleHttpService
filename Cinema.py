@@ -273,6 +273,7 @@ class Cinema:
             with self._lock:
                 if purgeNeeded:
                     self._purgeDb()
+                self._db.update({'now_entering': None})
                 self._insertUpdate(flat)
             time.sleep(1)
 
