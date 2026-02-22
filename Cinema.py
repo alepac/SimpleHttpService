@@ -221,7 +221,9 @@ class Cinema:
         return retval
     
     def _insertUpdate(self, data):
+        self._db.update({'now_entering': None, 'vendibile': False})
         for film in data:
+            film['vendibile'] = True
             found = self._db.search((self._Film.id == film['id']) & (self._Film.start == film['start']))
             if found:
                 doc_id = found[0].doc_id
@@ -270,11 +272,11 @@ class Cinema:
                     with self._lock:
                         self._saleXml = xml_data            
                     self.logger.info(f"Dati aggiornati dall'URL: {self.sale_url}")
-            with self._lock:
-                if purgeNeeded:
-                    self._purgeDb()
-                self._db.update({'now_entering': None})
-                self._insertUpdate(flat)
+            if len(flat) != 0:
+                with self._lock:
+                    if purgeNeeded:
+                        self._purgeDb()
+                    self._insertUpdate(flat)
             time.sleep(1)
 
     def start(self):
