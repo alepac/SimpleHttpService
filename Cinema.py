@@ -224,7 +224,7 @@ class Cinema:
         self._db.update({'now_entering': None, 'vendibile': False})
         for film in data:
             film['vendibile'] = True
-            found = self._db.search((self._Film.id == film['id']) & (self._Film.start == film['start']))
+            found = self._db.search((self._Film.id == film['id']) & (self._Film.start == film['start']) & (self._Film.theater_name == film['theater_name']))
             if found:
                 doc_id = found[0].doc_id
                 self._db.update(film, doc_ids=[doc_id])
