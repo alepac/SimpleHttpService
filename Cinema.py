@@ -33,6 +33,7 @@ SALE_FIELDS = [
     ("ends", "ends"),
     ("opens", "opens"),
     ("total_seats","total"),
+    ("free_seats","free_seats"),
     ("now_entering","now_entering"),
     ("playbill_url", "playbill_mini_path")
 
