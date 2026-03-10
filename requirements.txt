@@ -1,4 +1,5 @@
-pyinstaller==6.15
+pyinstaller==6.19
+pyinstaller-hooks-contrib==2026.3
 requests==2.31.0
 tinydb==4.8.2
 pywin32
