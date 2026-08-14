@@ -306,13 +306,21 @@ class Cinema:
     def getDbConfigJson(self):
         with self._lock:
             data = {}
-            data['db'] = self._db.search(self._Film.cinema_id == self._id)
-            data['config'] = self.getStoredConfig()
-            return json.dumps(data)
+            db = self._db.search(self._Film.cinema_id == self._id)
+            cfg = self.getStoredConfig()
+            data['config'] = cfg
+            if 'allowedTechnologies' in cfg and len(cfg['allowedTechnologies']) > 0:
+                for film in db:
+                    whitelist = []
+                    for tech in film['technologies']:
+                        if tech.strip().lower() in [x.lower() for x in cfg['allowedTechnologies']]:
+                            whitelist.append(tech)
+                    film['technologies'] = whitelist
+            data['db'] = db
+            return data
         
     def getDbJson(self):
-        with self._lock:
-            return json.dumps(self._db.search(self._Film.cinema_id == self._id))      
+        return self.getDbConfigJson()['db']   
         
     def getStoredConfig(self):
             try:

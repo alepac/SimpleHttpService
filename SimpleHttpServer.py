@@ -165,11 +165,11 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
                 elif service == "db": # legacy... to mantain for backward compatibility
                     self.send_header('Content-type', 'application/json')
                     self.end_headers()
-                    self.wfile.write(bytes(self.cinema_instances[cinema].getDbJson(), "utf8"))
+                    self.wfile.write(bytes(json.dumps(self.cinema_instances[cinema].getDbJson()), "utf8"))
                 elif service == "db_config":
                     self.send_header('Content-type', 'application/json')
                     self.end_headers()
-                    self.wfile.write(bytes(self.cinema_instances[cinema].getDbConfigJson(), "utf8"))
+                    self.wfile.write(bytes(json.dumps(self.cinema_instances[cinema].getDbConfigJson()), "utf8"))
                 else:
                     self.send_header('Content-type', 'text/xml')
                     self.end_headers()
