@@ -35,7 +35,8 @@ SALE_FIELDS = [
     ("total_seats","total"),
     ("free_seats","free_seats"),
     ("now_entering","now_entering"),
-    ("playbill_url", "playbill_mini_path")
+    ("playbill_url", "playbill_mini_path"),
+    ("matine","matine")
 
 ]
 
@@ -303,7 +304,7 @@ class Cinema:
         else:
             self.logger.warning("Il thread non è in esecuzione.")
     
-    def getDbConfigJson(self):
+    def getDbConfigJson(self, ignoreMatineeFilter=False):
         with self._lock:
             data = {}
             db = self._db.search(self._Film.cinema_id == self._id)
@@ -316,11 +317,17 @@ class Cinema:
                         if tech.strip().lower() in [x.lower() for x in cfg['allowedTechnologies']]:
                             whitelist.append(tech)
                     film['technologies'] = whitelist
-            data['db'] = db
+            if not ignoreMatineeFilter and 'enableMatinee' in cfg and not cfg['enableMatinee']:
+                data['db'] = []
+                for film in db:
+                    if 'matine' not in film or film['matine'] == False:
+                        data['db'].append(film)
+            else:
+                data['db'] = db
             return data
         
-    def getDbJson(self):
-        return self.getDbConfigJson()['db']   
+    def getDbJson(self, ignoreMatineeFilter=False):
+        return self.getDbConfigJson(ignoreMatineeFilter)['db']   
         
     def getStoredConfig(self):
             try:

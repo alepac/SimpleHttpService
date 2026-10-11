@@ -14,6 +14,7 @@ import secrets
 import sqlite3
 from http.cookies import CookieError, SimpleCookie
 from datetime import datetime
+from urllib.parse import parse_qs, urlsplit
 import version
 import json
 
@@ -147,7 +148,7 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
         cinema = None
         service = None
         try:
-            cinema, service = self.path[1:].split('/')[:2] 
+            cinema, service = urlsplit(self.path).path[1:].split('/')[:2] 
         except Exception as e:
             pass
         return cinema, service
@@ -223,6 +224,8 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
             return
         # Controlla se l'URL richiesto è quello della nostra pagina dinamica
         cinema, service = self.getCinema() 
+        query = parse_qs(urlsplit(self.path).query)
+        ignore_matinee_filter = query.get('ignoreMatineeFilter', ['false'])[0].lower() == 'true'
         if cinema in  self.cinema_instances:
             # Prepara e invia la risposta per la pagina dinamica
 
@@ -238,29 +241,27 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Content-type', 'application/json')
                 self.end_headers()
                 self.wfile.write(bytes(self.cinema_instances[cinema].getParamsJson(), "utf8"))
+            elif service == "dashboard":
+                # Path override
+                path = urlsplit(self.path).path
+                parts = [p for p in path.split('/') if p]
+                ends = '/' if path.endswith('/') else ''
+                self.path = '/' + '/'.join(parts[1:]) + ends
+                super().do_GET()
             else:
                 self.send_response(200)
-                if service == "dashboard":
-                    # Path override
-                    parts = [p for p in self.path.split('/') if p]
-                    # Uniamo tutto tranne il primo elemento
-                    ends = ''
-                    if self.path.endswith('/'):
-                        ends = '/'
-                    self.path = '/' + '/'.join(parts[1:]) + ends
-                    super().do_GET()
-                elif service == "films_json":
+                if service == "films_json":
                     self.send_header('Content-type', 'application/json')
                     self.end_headers()
                     self.wfile.write(bytes(self.cinema_instances[cinema].getFilmsJson(), "utf8"))
                 elif service == "db": # legacy... to mantain for backward compatibility
                     self.send_header('Content-type', 'application/json')
                     self.end_headers()
-                    self.wfile.write(bytes(json.dumps(self.cinema_instances[cinema].getDbJson()), "utf8"))
+                    self.wfile.write(bytes(json.dumps(self.cinema_instances[cinema].getDbJson(ignore_matinee_filter)), "utf8"))
                 elif service == "db_config":
                     self.send_header('Content-type', 'application/json')
                     self.end_headers()
-                    self.wfile.write(bytes(json.dumps(self.cinema_instances[cinema].getDbConfigJson()), "utf8"))
+                    self.wfile.write(bytes(json.dumps(self.cinema_instances[cinema].getDbConfigJson(ignore_matinee_filter)), "utf8"))
                 else:
                     self.send_header('Content-type', 'text/xml')
                     self.end_headers()
@@ -417,5 +418,3 @@ if __name__ == '__main__':
         service.Run()
     else:
         win32serviceutil.HandleCommandLine(SimpleHttpService)
-
-
