@@ -6,9 +6,18 @@ import socketserver
 
 
 class ThreadingHTTPServerWithArgs(socketserver.ThreadingMixIn, http.server.HTTPServer):
-    def __init__(self, server_address, RequestHandlerClass, cinema_instances):
+    def __init__(
+        self,
+        server_address,
+        RequestHandlerClass,
+        cinema_instances,
+        session_store,
+        cors_allowed_origins
+    ):
         super().__init__(server_address, RequestHandlerClass)
         self.cinema_instances = cinema_instances
+        self.session_store = session_store
+        self.cors_allowed_origins = cors_allowed_origins
     
     def finish_request(self, request, client_address):
         # Questo metodo viene chiamato per ogni richiesta.

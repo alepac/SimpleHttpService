@@ -10,6 +10,9 @@ import win32event
 import servicemanager
 import socket
 import sys
+import secrets
+import sqlite3
+from http.cookies import CookieError, SimpleCookie
 from datetime import datetime
 import version
 import json
@@ -19,7 +22,8 @@ from ThreadingHTTPServerWithArgs import ThreadingHTTPServerWithArgs
 
 default_values = {
     "httpPort": 8000,
-    "httpAddress": "0.0.0.0"
+    "httpAddress": "0.0.0.0",
+    "corsAllowedOrigins": "http://localhost:5173"
 }
 
 current_dir = os.path.dirname(sys.executable)
@@ -29,11 +33,47 @@ serviceLogger = logging.getLogger(__name__)
 
 serviceLogger.setLevel(logging.DEBUG)
 
+
+class SessionStore:
+    def __init__(self):
+        self._connection = sqlite3.connect(":memory:", check_same_thread=False)
+        self._lock = threading.Lock()
+        with self._lock:
+            self._connection.execute(
+                "CREATE TABLE sessions (session_id TEXT PRIMARY KEY, cinema_id TEXT NOT NULL)"
+            )
+
+    def is_valid(self, cinema, session_id):
+        with self._lock:
+            result = self._connection.execute(
+                "SELECT 1 FROM sessions WHERE cinema_id = ? AND session_id = ?",
+                (cinema, session_id)
+            ).fetchone()
+        return result is not None
+
+    def create(self, cinema, session_id):
+        with self._lock:
+            self._connection.execute(
+                "INSERT INTO sessions (session_id, cinema_id) VALUES (?, ?)",
+                (session_id, cinema)
+            )
+            self._connection.commit()
+
+    def delete(self, cinema, session_id):
+        with self._lock:
+            self._connection.execute(
+                "DELETE FROM sessions WHERE cinema_id = ? AND session_id = ?",
+                (cinema, session_id)
+            )
+            self._connection.commit()
+
+
 class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
     # Override the __init__ method to specify the directory
     def __init__(self, request, client_address, server, *args, **kwargs):
         # Questi sono gli argomenti aggiuntivi che passerai al server, qui li estraiamo.
         self.cinema_instances = kwargs.pop('cinema_instances', {})
+        self._pending_session_cookie = None
         
         # Ora passiamo tutti gli argomenti al costruttore della classe base.
         super().__init__(request, client_address, server, directory=web_folder, *args, **kwargs)    
@@ -43,9 +83,26 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
         
     def end_headers(self):
         # Aggiunge l'header CORS a ogni risposta (GET, POST, ecc.)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Requested-With')
+        origin = self.headers.get('Origin')
+        if origin in self.server.cors_allowed_origins:
+            self.send_header('Access-Control-Allow-Origin', origin)
+            self.send_header('Access-Control-Allow-Credentials', 'true')
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Requested-With')
+            self.send_header('Vary', 'Origin')
+        if self._pending_session_cookie is not None:
+            cookie_name, session_id = self._pending_session_cookie
+            if session_id is None:
+                self.send_header(
+                    'Set-Cookie',
+                    f'{cookie_name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax'
+                )
+            else:
+                self.send_header(
+                    'Set-Cookie',
+                    f'{cookie_name}={session_id}; Path=/; HttpOnly; SameSite=Lax'
+                )
+            self._pending_session_cookie = None
         super().end_headers()
     
     def do_OPTIONS(self):
@@ -54,17 +111,36 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         
     def checkAuth(self, cinema):
+        cookie_name = self._session_cookie_name(cinema)
+        session_id = self._get_session_id(cookie_name)
+        if session_id is not None and self.server.session_store.is_valid(cinema, session_id):
+            return True
+
         auth_header = self.headers.get('Authorization')
-        # 2. Verifica se l'header è presente e corretto
         if auth_header != self.cinema_instances[cinema]._password:
-            # Se la password è sbagliata o assente
             self.send_response(401) # 401 Unauthorized
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             response = {"status": "error", "msg": "Accesso negato: password errata"}
             self.wfile.write(json.dumps(response).encode('utf-8'))
             return False
+
+        session_id = secrets.token_urlsafe(32)
+        self.server.session_store.create(cinema, session_id)
+        self._pending_session_cookie = (cookie_name, session_id)
         return True
+
+    def _get_session_id(self, cookie_name):
+        cookies = SimpleCookie()
+        try:
+            cookies.load(self.headers.get('Cookie', ''))
+        except CookieError:
+            return None
+        session_cookie = cookies.get(cookie_name)
+        return session_cookie.value if session_cookie is not None else None
+
+    def _session_cookie_name(self, cinema):
+        return f'session_{cinema}'
     
     def getCinema(self):
                 # Controlla se l'URL richiesto è quello della nostra pagina dinamica
@@ -79,7 +155,22 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         
         cinema, service = self.getCinema() 
-        # 1. Verifica autorizzazione (opzionale, come per la GET)
+        if cinema not in self.cinema_instances:
+            self.send_error(404)
+            return
+
+        if service == 'logout':
+            cookie_name = self._session_cookie_name(cinema)
+            session_id = self._get_session_id(cookie_name)
+            if session_id is not None:
+                self.server.session_store.delete(cinema, session_id)
+            self._pending_session_cookie = (cookie_name, None)
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(b'{"status": "success"}')
+            return
+
         if not self.checkAuth(cinema):
             return
         
@@ -200,6 +291,7 @@ class SimpleHttpService(win32serviceutil.ServiceFramework):
             self.cinema_data_managers = {}
             self.stop_event = Event()
             self.start_event = Event()
+            self.session_store = SessionStore()
         except Exception as e:
             self.log.error(f"Exception initializing SimpleHttpService: {e}")
 
@@ -258,6 +350,11 @@ class SimpleHttpService(win32serviceutil.ServiceFramework):
 
         httpPort = int(config['DEFAULT']['httpPort'])
         httpAddress = config['DEFAULT']['httpAddress']
+        cors_allowed_origins = {
+            origin.strip()
+            for origin in config['DEFAULT']['corsAllowedOrigins'].split(',')
+            if origin.strip()
+        }
         
         for section in config.sections():
             if not section.startswith('DEFAULT'):
@@ -287,7 +384,13 @@ class SimpleHttpService(win32serviceutil.ServiceFramework):
 
         while not self.stop_event.is_set():
             try:
-                self.server = ThreadingHTTPServerWithArgs((httpAddress, httpPort), MyRequestHandler, self.cinema_data_managers)
+                self.server = ThreadingHTTPServerWithArgs(
+                    (httpAddress, httpPort),
+                    MyRequestHandler,
+                    self.cinema_data_managers,
+                    self.session_store,
+                    cors_allowed_origins
+                )
                 self.log.info(f'Serving on interface {httpAddress} port {httpPort} from "{web_folder}"')
                 self.server.serve_forever()
             except Exception as e:
@@ -314,8 +417,5 @@ if __name__ == '__main__':
         service.Run()
     else:
         win32serviceutil.HandleCommandLine(SimpleHttpService)
-
-
-
 
 
